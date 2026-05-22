@@ -52,6 +52,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hybridtempo.android.data.BreathworkRecommendation
+import com.hybridtempo.android.data.BreathworkSession
 import kotlinx.coroutines.delay
 
 private enum class AppScreen {
@@ -62,27 +66,10 @@ private enum class AppScreen {
     History,
 }
 
-private data class CheckInState(
-    val energy: Int = 6,
-    val soreness: Int = 4,
-    val stress: Int = 5,
-    val workoutType: String = "Hybrid",
-    val workoutIntensity: Int = 7,
-    val timeAvailable: Int = 5,
-)
-
-private data class Recommendation(
-    val protocol: String,
-    val durationMinutes: Int,
-    val rationale: String,
-    val cadence: String,
-)
-
 @Composable
-fun HybridTempoApp() {
+fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
     var screen by remember { mutableStateOf(AppScreen.Welcome) }
-    var checkIn by remember { mutableStateOf(CheckInState()) }
-    val recommendation = remember(checkIn) { buildRecommendation(checkIn) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -112,24 +99,33 @@ fun HybridTempoApp() {
                     )
 
                     AppScreen.CheckIn -> CheckInScreen(
-                        state = checkIn,
-                        onStateChange = { checkIn = it },
-                        onRecommend = { screen = AppScreen.Recommendation },
+                        state = uiState.draft,
+                        onStateChange = viewModel::updateDraft,
+                        onRecommend = {
+                            viewModel.saveCheckIn()
+                            screen = AppScreen.Recommendation
+                        },
                     )
 
                     AppScreen.Recommendation -> RecommendationScreen(
-                        recommendation = recommendation,
+                        recommendation = uiState.recommendation,
+                        saveMessage = uiState.saveMessage,
                         onStartSession = { screen = AppScreen.Session },
                         onEdit = { screen = AppScreen.CheckIn },
                     )
 
                     AppScreen.Session -> SessionScreen(
-                        recommendation = recommendation,
-                        onFinish = { screen = AppScreen.History },
+                        recommendation = uiState.recommendation,
+                        onFinish = {
+                            viewModel.completeCurrentSession()
+                            screen = AppScreen.History
+                        },
                     )
 
                     AppScreen.History -> HistoryScreen(
-                        recommendation = recommendation,
+                        recommendation = uiState.recommendation,
+                        sessions = uiState.recentSessions,
+                        saveMessage = uiState.saveMessage,
                         onCheckIn = { screen = AppScreen.CheckIn },
                     )
                 }
@@ -181,8 +177,8 @@ private fun WelcomeScreen(
 
 @Composable
 private fun CheckInScreen(
-    state: CheckInState,
-    onStateChange: (CheckInState) -> Unit,
+    state: CheckInDraft,
+    onStateChange: (CheckInDraft) -> Unit,
     onRecommend: () -> Unit,
 ) {
     ScreenFrame {
@@ -221,7 +217,8 @@ private fun CheckInScreen(
 
 @Composable
 private fun RecommendationScreen(
-    recommendation: Recommendation,
+    recommendation: BreathworkRecommendation,
+    saveMessage: String,
     onStartSession: () -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -249,6 +246,11 @@ private fun RecommendationScreen(
             body = recommendation.cadence,
             modifier = Modifier.padding(top = 14.dp),
         )
+        InsightCard(
+            title = "Persistence",
+            body = saveMessage,
+            modifier = Modifier.padding(top = 14.dp),
+        )
         Spacer(modifier = Modifier.height(36.dp))
         PrimaryAction(text = "Start session", onClick = onStartSession)
         OutlinedButton(
@@ -264,7 +266,7 @@ private fun RecommendationScreen(
 
 @Composable
 private fun SessionScreen(
-    recommendation: Recommendation,
+    recommendation: BreathworkRecommendation,
     onFinish: () -> Unit,
 ) {
     var elapsedSeconds by remember { mutableIntStateOf(0) }
@@ -330,7 +332,9 @@ private fun SessionScreen(
 
 @Composable
 private fun HistoryScreen(
-    recommendation: Recommendation,
+    recommendation: BreathworkRecommendation,
+    sessions: List<BreathworkSession>,
+    saveMessage: String,
     onCheckIn: () -> Unit,
 ) {
     ScreenFrame {
@@ -348,10 +352,17 @@ private fun HistoryScreen(
             modifier = Modifier.padding(top = 18.dp),
         )
         InsightCard(
-            title = "MVP storage note",
-            body = "This first shell keeps data in memory. Firebase Auth, Firestore sessions, and saved check-ins come next.",
+            title = "Persistence",
+            body = saveMessage,
             modifier = Modifier.padding(top = 14.dp),
         )
+        sessions.forEach { session ->
+            InsightCard(
+                title = session.protocol,
+                body = "${session.durationMinutes} min · ${session.cadence} · ${session.completedAt}",
+                modifier = Modifier.padding(top = 14.dp),
+            )
+        }
         Spacer(modifier = Modifier.height(36.dp))
         PrimaryAction(text = "New check-in", onClick = onCheckIn)
     }
@@ -555,43 +566,6 @@ private fun Eyebrow(text: String) {
         fontWeight = FontWeight.Bold,
         letterSpacing = 1.2.sp,
     )
-}
-
-private fun buildRecommendation(state: CheckInState): Recommendation {
-    val highLoad = state.workoutIntensity >= 7 || state.soreness >= 7
-    val highStress = state.stress >= 7
-    val lowEnergy = state.energy <= 4
-    val duration = state.timeAvailable
-
-    return when {
-        highLoad && highStress -> Recommendation(
-            protocol = "Downregulation",
-            durationMinutes = duration,
-            rationale = "High training load plus stress calls for extended exhales and a fast shift out of sympathetic drive.",
-            cadence = "4 second inhale · 6 second exhale",
-        )
-
-        lowEnergy && state.workoutType == "Recovery" -> Recommendation(
-            protocol = "Recovery reset",
-            durationMinutes = duration,
-            rationale = "Low energy on a lighter day points to a calm reset instead of more stimulation.",
-            cadence = "4 second inhale · 4 second exhale",
-        )
-
-        state.workoutIntensity <= 4 && state.energy >= 7 -> Recommendation(
-            protocol = "Activation",
-            durationMinutes = duration,
-            rationale = "Your recovery cost is low and energy is available, so the session can sharpen focus without overloading you.",
-            cadence = "3 second inhale · 3 second exhale",
-        )
-
-        else -> Recommendation(
-            protocol = "Post-training recovery",
-            durationMinutes = duration,
-            rationale = "Your check-in suggests moderate load. This keeps the protocol steady, controlled, and recovery-oriented.",
-            cadence = "4 second inhale · 5 second exhale",
-        )
-    }
 }
 
 private fun formatTime(seconds: Int): String {
