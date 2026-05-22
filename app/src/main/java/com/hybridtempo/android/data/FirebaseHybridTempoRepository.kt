@@ -31,6 +31,9 @@ class FirebaseHybridTempoRepository(
             weeklyTrainingFrequency = document.getLong("weeklyTrainingFrequency")?.toInt() ?: 5,
             goals = document.get("goals").asStringList().ifEmpty { listOf("recovery", "race prep") },
             preferredSessionLength = document.getLong("preferredSessionLength")?.toInt() ?: 5,
+            eveningReminderEnabled = document.getBoolean("eveningReminderEnabled") ?: false,
+            eveningReminderHour = document.getLong("eveningReminderHour")?.toInt() ?: 20,
+            eveningReminderMinute = document.getLong("eveningReminderMinute")?.toInt() ?: 30,
         )
     }
 
@@ -160,6 +163,9 @@ private fun AthleteProfile.toFirestoreMap(): Map<String, Any> = mapOf(
     "weeklyTrainingFrequency" to weeklyTrainingFrequency,
     "goals" to goals,
     "preferredSessionLength" to preferredSessionLength,
+    "eveningReminderEnabled" to eveningReminderEnabled,
+    "eveningReminderHour" to eveningReminderHour,
+    "eveningReminderMinute" to eveningReminderMinute,
 )
 
 private fun DailyCheckIn.toFirestoreMap(): Map<String, Any> = mapOf(

@@ -10,6 +10,9 @@ data class AthleteProfile(
     val weeklyTrainingFrequency: Int = 5,
     val goals: List<String> = listOf("recovery", "race prep"),
     val preferredSessionLength: Int = 5,
+    val eveningReminderEnabled: Boolean = false,
+    val eveningReminderHour: Int = 20,
+    val eveningReminderMinute: Int = 30,
 )
 
 data class DailyCheckIn(

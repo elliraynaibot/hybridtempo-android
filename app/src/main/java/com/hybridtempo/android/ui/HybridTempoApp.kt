@@ -1,5 +1,10 @@
 package com.hybridtempo.android.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -57,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.ContextCompat
 import com.hybridtempo.android.audio.AmbientAudioController
 import com.hybridtempo.android.data.BreathPhase
 import com.hybridtempo.android.data.BreathworkProtocol
@@ -318,6 +324,10 @@ private fun ProfileFormScreen(
                 }
                 onStateChange(state.copy(goals = nextGoals.ifEmpty { listOf("recovery") }))
             },
+        )
+        ReminderSettingsCard(
+            state = state,
+            onStateChange = onStateChange,
         )
         Spacer(modifier = Modifier.height(30.dp))
         PrimaryAction(text = action, onClick = onAction)
@@ -909,6 +919,75 @@ private fun GoalSelector(
 }
 
 @Composable
+private fun ReminderSettingsCard(
+    state: AthleteProfileDraft,
+    onStateChange: (AthleteProfileDraft) -> Unit,
+) {
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            onStateChange(state.copy(eveningReminderEnabled = true))
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 22.dp),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)),
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Evening recovery reminder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${state.eveningReminderHour.toDisplayHour()}:${state.eveningReminderMinute.toString().padStart(2, '0')} PM daily",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = state.eveningReminderEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled && !context.hasNotificationPermission()) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            onStateChange(state.copy(eveningReminderEnabled = enabled))
+                        }
+                    },
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(top = 14.dp),
+            ) {
+                listOf(19, 20, 21).forEach { hour ->
+                    SelectButton(
+                        text = "${hour.toDisplayHour()} PM",
+                        selected = state.eveningReminderHour == hour,
+                        onClick = { onStateChange(state.copy(eveningReminderHour = hour)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Text(
+                "Save settings to schedule or cancel the reminder on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun SelectButton(
     text: String,
     selected: Boolean,
@@ -1301,3 +1380,17 @@ private val RecommendationSource.label: String
         RecommendationSource.BackendAi -> "AI-backed recommendation"
         RecommendationSource.DeterministicFallback -> "Local fallback recommendation"
     }
+
+private fun android.content.Context.hasNotificationPermission(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+
+    return ContextCompat.checkSelfPermission(
+        this,
+        Manifest.permission.POST_NOTIFICATIONS,
+    ) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun Int.toDisplayHour(): Int = when (val hour = this % 12) {
+    0 -> 12
+    else -> hour
+}

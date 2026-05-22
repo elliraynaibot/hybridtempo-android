@@ -15,6 +15,7 @@ import com.hybridtempo.android.recommendation.RecentTrendContext
 import com.hybridtempo.android.recommendation.RecommendationEngine
 import com.hybridtempo.android.recommendation.RecommendationRequest
 import com.hybridtempo.android.recommendation.RecommendationSource
+import com.hybridtempo.android.notifications.RecoveryReminderScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +38,9 @@ data class AthleteProfileDraft(
     val weeklyTrainingFrequency: Int = 5,
     val goals: List<String> = listOf("recovery", "race prep"),
     val preferredSessionLength: Int = 5,
+    val eveningReminderEnabled: Boolean = false,
+    val eveningReminderHour: Int = 20,
+    val eveningReminderMinute: Int = 30,
 )
 
 data class HybridTempoUiState(
@@ -56,6 +60,7 @@ data class HybridTempoUiState(
 class HybridTempoViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FirebaseHybridTempoRepository(application.applicationContext)
     private val recommendationEngine: RecommendationEngine = BackendRecommendationEngine()
+    private val reminderScheduler = RecoveryReminderScheduler(application.applicationContext)
     private val _uiState = MutableStateFlow(HybridTempoUiState())
     val uiState: StateFlow<HybridTempoUiState> = _uiState.asStateFlow()
 
@@ -84,6 +89,13 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 )
             }
         }
+        profile?.let {
+            reminderScheduler.applySettings(
+                enabled = it.eveningReminderEnabled,
+                hour = it.eveningReminderHour,
+                minute = it.eveningReminderMinute,
+            )
+        }
         refreshRecommendation()
     }
 
@@ -110,6 +122,11 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                     saveMessage = result.message,
                 )
             }
+            reminderScheduler.applySettings(
+                enabled = profileDraft.eveningReminderEnabled,
+                hour = profileDraft.eveningReminderHour,
+                minute = profileDraft.eveningReminderMinute,
+            )
             refreshRecommendation()
         }
     }
@@ -242,6 +259,9 @@ private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProf
     weeklyTrainingFrequency = weeklyTrainingFrequency,
     goals = goals,
     preferredSessionLength = preferredSessionLength,
+    eveningReminderEnabled = eveningReminderEnabled,
+    eveningReminderHour = eveningReminderHour,
+    eveningReminderMinute = eveningReminderMinute,
 )
 
 private fun AthleteProfile.toAthleteProfileDraft(): AthleteProfileDraft = AthleteProfileDraft(
@@ -251,6 +271,9 @@ private fun AthleteProfile.toAthleteProfileDraft(): AthleteProfileDraft = Athlet
     weeklyTrainingFrequency = weeklyTrainingFrequency,
     goals = goals,
     preferredSessionLength = preferredSessionLength,
+    eveningReminderEnabled = eveningReminderEnabled,
+    eveningReminderHour = eveningReminderHour,
+    eveningReminderMinute = eveningReminderMinute,
 )
 
 private fun AthleteProfileDraft.toProfileContext(): AthleteProfileContext = AthleteProfileContext(
