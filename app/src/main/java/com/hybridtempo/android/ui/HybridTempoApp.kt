@@ -30,6 +30,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +60,7 @@ import com.hybridtempo.android.data.BreathworkSession
 import kotlinx.coroutines.delay
 
 private enum class AppScreen {
+    Onboarding,
     Welcome,
     CheckIn,
     Recommendation,
@@ -68,7 +70,7 @@ private enum class AppScreen {
 
 @Composable
 fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
-    var screen by remember { mutableStateOf(AppScreen.Welcome) }
+    var screen by remember { mutableStateOf(AppScreen.Onboarding) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Surface(
@@ -93,6 +95,15 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                 modifier = Modifier.fillMaxSize(),
             ) { target ->
                 when (target) {
+                    AppScreen.Onboarding -> OnboardingScreen(
+                        state = uiState.profileDraft,
+                        onStateChange = viewModel::updateProfileDraft,
+                        onComplete = {
+                            viewModel.saveProfile()
+                            screen = AppScreen.Welcome
+                        },
+                    )
+
                     AppScreen.Welcome -> WelcomeScreen(
                         onStart = { screen = AppScreen.CheckIn },
                         onHistory = { screen = AppScreen.History },
@@ -131,6 +142,75 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OnboardingScreen(
+    state: AthleteProfileDraft,
+    onStateChange: (AthleteProfileDraft) -> Unit,
+    onComplete: () -> Unit,
+) {
+    ScreenFrame {
+        Eyebrow("Athlete setup")
+        Text(
+            text = "Tune breathwork around your training.",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        Text(
+            text = "A short profile gives the recommendation engine better defaults without making the app feel heavy.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+        )
+        OutlinedTextField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = { Text("Name") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = state.raceDate,
+            onValueChange = { onStateChange(state.copy(raceDate = it)) },
+            label = { Text("Race date (optional)") },
+            placeholder = { Text("YYYY-MM-DD") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        )
+        Spacer(modifier = Modifier.height(22.dp))
+        Text("Training style", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        ChipRow(
+            options = listOf("Hybrid", "Running", "Strength", "Functional fitness", "Recovery focused"),
+            selected = state.trainingStyle,
+            onSelect = { onStateChange(state.copy(trainingStyle = it)) },
+        )
+        FrequencyRow(
+            selected = state.weeklyTrainingFrequency,
+            onSelect = { onStateChange(state.copy(weeklyTrainingFrequency = it)) },
+        )
+        DurationRow(
+            selected = state.preferredSessionLength,
+            label = "Preferred session length",
+            onSelect = { onStateChange(state.copy(preferredSessionLength = it)) },
+        )
+        GoalSelector(
+            selected = state.goals,
+            onToggle = { goal ->
+                val nextGoals = if (goal in state.goals) {
+                    state.goals - goal
+                } else {
+                    state.goals + goal
+                }
+                onStateChange(state.copy(goals = nextGoals.ifEmpty { listOf("recovery") }))
+            },
+        )
+        Spacer(modifier = Modifier.height(30.dp))
+        PrimaryAction(text = "Save athlete profile", onClick = onComplete)
     }
 }
 
@@ -472,32 +552,98 @@ private fun ChipRow(
 }
 
 @Composable
-private fun DurationRow(selected: Int, onSelect: (Int) -> Unit) {
+private fun FrequencyRow(selected: Int, onSelect: (Int) -> Unit) {
     Text(
-        text = "Time available",
+        text = "Weekly training frequency",
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(top = 14.dp, bottom = 10.dp),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        listOf(3, 4, 5, 6).forEach { frequency ->
+            SelectButton(
+                text = "$frequency x",
+                selected = frequency == selected,
+                onClick = { onSelect(frequency) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DurationRow(
+    selected: Int,
+    label: String = "Time available",
+    onSelect: (Int) -> Unit,
+) {
+    Text(
+        text = label,
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
         listOf(3, 5, 10).forEach { minutes ->
-            val selectedContainer = if (minutes == selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-            val selectedContent = if (minutes == selected) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            }
-            Button(
+            SelectButton(
+                text = "${minutes}m",
+                selected = minutes == selected,
                 onClick = { onSelect(minutes) },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = selectedContainer),
-            ) {
-                Text("${minutes}m", color = selectedContent)
+            )
+        }
+    }
+}
+
+@Composable
+private fun GoalSelector(
+    selected: List<String>,
+    onToggle: (String) -> Unit,
+) {
+    Text(
+        text = "Goals",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 18.dp),
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .horizontalScroll(rememberScrollState()),
+    ) {
+        listOf("recovery", "activation", "focus", "race prep", "sleep support").forEach { goal ->
+            if (goal in selected) {
+                ElevatedAssistChip(onClick = { onToggle(goal) }, label = { Text(goal) })
+            } else {
+                AssistChip(onClick = { onToggle(goal) }, label = { Text(goal) })
             }
         }
+    }
+}
+
+@Composable
+private fun SelectButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val selectedContainer = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val selectedContent = if (selected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(containerColor = selectedContainer),
+    ) {
+        Text(text, color = selectedContent)
     }
 }
 

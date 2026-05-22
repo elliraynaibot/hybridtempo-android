@@ -23,9 +23,23 @@ data class CheckInDraft(
     val timeAvailable: Int = 5,
 )
 
+data class AthleteProfileDraft(
+    val name: String = "",
+    val raceDate: String = "",
+    val trainingStyle: String = "Hybrid",
+    val weeklyTrainingFrequency: Int = 5,
+    val goals: List<String> = listOf("recovery", "race prep"),
+    val preferredSessionLength: Int = 5,
+)
+
 data class HybridTempoUiState(
+    val profileDraft: AthleteProfileDraft = AthleteProfileDraft(),
+    val hasCompletedOnboarding: Boolean = false,
     val draft: CheckInDraft = CheckInDraft(),
-    val recommendation: BreathworkRecommendation = buildRecommendation(CheckInDraft()),
+    val recommendation: BreathworkRecommendation = buildRecommendation(
+        draft = CheckInDraft(),
+        profile = AthleteProfileDraft(),
+    ),
     val recentSessions: List<BreathworkSession> = emptyList(),
     val saveMessage: String = "Firebase persistence is ready when app/google-services.json is added.",
     val isSaving: Boolean = false,
@@ -38,9 +52,34 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         viewModelScope.launch {
-            runCatching { repository.upsertProfile(AthleteProfile()) }
-                .onSuccess { result -> _uiState.update { it.copy(saveMessage = result.message) } }
             refreshHistory()
+        }
+    }
+
+    fun updateProfileDraft(draft: AthleteProfileDraft) {
+        _uiState.update { it.copy(profileDraft = draft) }
+    }
+
+    fun saveProfile() {
+        val profileDraft = _uiState.value.profileDraft
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true) }
+            val result = runCatching {
+                repository.upsertProfile(profileDraft.toAthleteProfile())
+            }.fold(
+                onSuccess = { it },
+                onFailure = { com.hybridtempo.android.data.SaveResult(false, it.message ?: "Profile kept in memory.") },
+            )
+            _uiState.update {
+                val nextDraft = it.draft.copy(timeAvailable = profileDraft.preferredSessionLength)
+                it.copy(
+                    hasCompletedOnboarding = true,
+                    draft = nextDraft,
+                    recommendation = buildRecommendation(nextDraft, profileDraft),
+                    isSaving = false,
+                    saveMessage = result.message,
+                )
+            }
         }
     }
 
@@ -48,7 +87,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update {
             it.copy(
                 draft = draft,
-                recommendation = buildRecommendation(draft),
+                recommendation = buildRecommendation(draft, it.profileDraft),
             )
         }
     }
@@ -112,12 +151,23 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
     }
 }
 
-fun buildRecommendation(draft: CheckInDraft): BreathworkRecommendation {
+fun buildRecommendation(
+    draft: CheckInDraft,
+    profile: AthleteProfileDraft,
+): BreathworkRecommendation {
     val highLoad = draft.workoutIntensity >= 7 || draft.soreness >= 7
     val highStress = draft.stress >= 7
     val lowEnergy = draft.energy <= 4
+    val wantsSleepSupport = "sleep support" in profile.goals
 
     return when {
+        wantsSleepSupport && highStress -> BreathworkRecommendation(
+            protocol = "Sleep transition",
+            durationMinutes = draft.timeAvailable,
+            rationale = "Your goals include sleep support and stress is elevated, so this shifts the body toward a calmer night state.",
+            cadence = "4 second inhale · 7 second exhale",
+        )
+
         highLoad && highStress -> BreathworkRecommendation(
             protocol = "Downregulation",
             durationMinutes = draft.timeAvailable,
@@ -155,4 +205,12 @@ private fun CheckInDraft.toDailyCheckIn(): DailyCheckIn = DailyCheckIn(
     timeAvailable = timeAvailable,
     workoutType = workoutType,
     workoutIntensity = workoutIntensity,
+)
+
+private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProfile(
+    name = name,
+    raceDate = raceDate,
+    trainingStyle = trainingStyle,
+    goals = goals,
+    preferredSessionLength = preferredSessionLength,
 )
