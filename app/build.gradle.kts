@@ -37,6 +37,7 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.media3.exoplayer)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

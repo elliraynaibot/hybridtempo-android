@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hybridtempo.android.data.AthleteProfile
 import com.hybridtempo.android.data.BreathworkRecommendation
+import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
 import com.hybridtempo.android.data.FirebaseHybridTempoRepository
@@ -188,6 +189,7 @@ fun buildRecommendation(
             durationMinutes = draft.timeAvailable,
             rationale = "Your goals include sleep support and stress is elevated, so this shifts the body toward a calmer night state.",
             cadence = "4 second inhale · 7 second exhale",
+            breathworkProtocol = BreathworkProtocol.sleepTransition(draft.timeAvailable),
         )
 
         highLoad && highStress -> BreathworkRecommendation(
@@ -195,6 +197,7 @@ fun buildRecommendation(
             durationMinutes = draft.timeAvailable,
             rationale = "High training load plus stress calls for extended exhales and a fast shift out of sympathetic drive.",
             cadence = "4 second inhale · 6 second exhale",
+            breathworkProtocol = BreathworkProtocol.downregulation(draft.timeAvailable),
         )
 
         lowEnergy && draft.workoutType == "Recovery" -> BreathworkRecommendation(
@@ -202,6 +205,7 @@ fun buildRecommendation(
             durationMinutes = draft.timeAvailable,
             rationale = "Low energy on a lighter day points to a calm reset instead of more stimulation.",
             cadence = "4 second inhale · 4 second exhale",
+            breathworkProtocol = BreathworkProtocol.recoveryReset(draft.timeAvailable),
         )
 
         draft.workoutIntensity <= 4 && draft.energy >= 7 -> BreathworkRecommendation(
@@ -209,6 +213,7 @@ fun buildRecommendation(
             durationMinutes = draft.timeAvailable,
             rationale = "Your recovery cost is low and energy is available, so the session can sharpen focus without overloading you.",
             cadence = "3 second inhale · 3 second exhale",
+            breathworkProtocol = BreathworkProtocol.activation(draft.timeAvailable),
         )
 
         else -> BreathworkRecommendation(
@@ -216,6 +221,7 @@ fun buildRecommendation(
             durationMinutes = draft.timeAvailable,
             rationale = "Your check-in suggests moderate load. This keeps the protocol steady, controlled, and recovery-oriented.",
             cadence = "4 second inhale · 5 second exhale",
+            breathworkProtocol = BreathworkProtocol.postTrainingRecovery(draft.timeAvailable),
         )
     }
 }

@@ -30,6 +30,81 @@ data class BreathworkRecommendation(
     val durationMinutes: Int = 5,
     val rationale: String = "A steady recovery protocol fits the current training context.",
     val cadence: String = "4 second inhale · 5 second exhale",
+    val breathworkProtocol: BreathworkProtocol = BreathworkProtocol.postTrainingRecovery(durationMinutes = 5),
+)
+
+data class BreathworkProtocol(
+    val category: String,
+    val title: String,
+    val durationMinutes: Int,
+    val phases: List<BreathPhase>,
+    val ambientTrackName: String = "ambient_loop",
+) {
+    val cycleSeconds: Int
+        get() = phases.sumOf { it.seconds }.coerceAtLeast(1)
+
+    val totalSeconds: Int
+        get() = (durationMinutes * 60).coerceAtLeast(cycleSeconds)
+
+    companion object {
+        fun downregulation(durationMinutes: Int): BreathworkProtocol = BreathworkProtocol(
+            category = "downregulation",
+            title = "Downregulation",
+            durationMinutes = durationMinutes,
+            phases = listOf(
+                BreathPhase(label = "Inhale", seconds = 4, instruction = "Draw air in through the nose", scaleTarget = 1.12f),
+                BreathPhase(label = "Exhale", seconds = 6, instruction = "Let the exhale do the work", scaleTarget = 0.72f),
+            ),
+        )
+
+        fun sleepTransition(durationMinutes: Int): BreathworkProtocol = BreathworkProtocol(
+            category = "sleep_transition",
+            title = "Sleep transition",
+            durationMinutes = durationMinutes,
+            phases = listOf(
+                BreathPhase(label = "Inhale", seconds = 4, instruction = "Slow nasal inhale", scaleTarget = 1.08f),
+                BreathPhase(label = "Exhale", seconds = 7, instruction = "Long quiet exhale", scaleTarget = 0.68f),
+                BreathPhase(label = "Rest", seconds = 1, instruction = "Soften the jaw", scaleTarget = 0.68f),
+            ),
+        )
+
+        fun recoveryReset(durationMinutes: Int): BreathworkProtocol = BreathworkProtocol(
+            category = "recovery",
+            title = "Recovery reset",
+            durationMinutes = durationMinutes,
+            phases = listOf(
+                BreathPhase(label = "Inhale", seconds = 4, instruction = "Expand the ribs", scaleTarget = 1.08f),
+                BreathPhase(label = "Exhale", seconds = 4, instruction = "Relax the shoulders", scaleTarget = 0.78f),
+            ),
+        )
+
+        fun activation(durationMinutes: Int): BreathworkProtocol = BreathworkProtocol(
+            category = "activation",
+            title = "Activation",
+            durationMinutes = durationMinutes,
+            phases = listOf(
+                BreathPhase(label = "Inhale", seconds = 3, instruction = "Crisp controlled inhale", scaleTarget = 1.14f),
+                BreathPhase(label = "Exhale", seconds = 3, instruction = "Controlled reset", scaleTarget = 0.82f),
+            ),
+        )
+
+        fun postTrainingRecovery(durationMinutes: Int): BreathworkProtocol = BreathworkProtocol(
+            category = "post_training_recovery",
+            title = "Post-training recovery",
+            durationMinutes = durationMinutes,
+            phases = listOf(
+                BreathPhase(label = "Inhale", seconds = 4, instruction = "Breathe into the low ribs", scaleTarget = 1.1f),
+                BreathPhase(label = "Exhale", seconds = 5, instruction = "Drop the heart rate down", scaleTarget = 0.74f),
+            ),
+        )
+    }
+}
+
+data class BreathPhase(
+    val label: String,
+    val seconds: Int,
+    val instruction: String,
+    val scaleTarget: Float,
 )
 
 data class BreathworkSession(

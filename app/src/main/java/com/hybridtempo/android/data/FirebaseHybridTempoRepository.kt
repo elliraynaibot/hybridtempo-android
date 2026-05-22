@@ -151,6 +151,7 @@ private fun BreathworkRecommendation.toFirestoreMap(): Map<String, Any> = mapOf(
     "durationMinutes" to durationMinutes,
     "rationale" to rationale,
     "cadence" to cadence,
+    "breathworkProtocol" to breathworkProtocol.toFirestoreMap(),
 )
 
 private fun BreathworkSession.toFirestoreMap(): Map<String, Any> = mapOf(
@@ -165,3 +166,18 @@ private fun BreathworkSession.toFirestoreMap(): Map<String, Any> = mapOf(
 private fun Any?.asStringList(): List<String> = (this as? List<*>)
     ?.filterIsInstance<String>()
     .orEmpty()
+
+private fun BreathworkProtocol.toFirestoreMap(): Map<String, Any> = mapOf(
+    "category" to category,
+    "title" to title,
+    "durationMinutes" to durationMinutes,
+    "ambientTrackName" to ambientTrackName,
+    "phases" to phases.map { phase ->
+        mapOf(
+            "label" to phase.label,
+            "seconds" to phase.seconds,
+            "instruction" to phase.instruction,
+            "scaleTarget" to phase.scaleTarget.toDouble(),
+        )
+    },
+)

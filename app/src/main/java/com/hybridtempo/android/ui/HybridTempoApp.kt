@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,12 +50,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hybridtempo.android.audio.AmbientAudioController
+import com.hybridtempo.android.data.BreathPhase
+import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import kotlinx.coroutines.delay
@@ -474,45 +479,113 @@ private fun SessionScreen(
     onSettings: () -> Unit,
     onFinish: () -> Unit,
 ) {
+    val protocol = recommendation.breathworkProtocol
+    val context = LocalContext.current
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(true) }
-    val totalSeconds = recommendation.durationMinutes * 60
+    var ambientEnabled by remember { mutableStateOf(true) }
+    val playbackState = remember(protocol, elapsedSeconds) {
+        protocol.playbackStateAt(elapsedSeconds)
+    }
     val progress by animateFloatAsState(
-        targetValue = elapsedSeconds.toFloat() / totalSeconds.toFloat(),
+        targetValue = elapsedSeconds.toFloat() / protocol.totalSeconds.toFloat(),
         animationSpec = tween(300),
         label = "sessionProgress",
     )
+    val breathScale by animateFloatAsState(
+        targetValue = playbackState.phase.scaleTarget,
+        animationSpec = tween((playbackState.phase.seconds * 850).coerceAtLeast(700)),
+        label = "breathScale",
+    )
+    val ambientAudioController = remember(protocol.ambientTrackName) {
+        AmbientAudioController(
+            context = context.applicationContext,
+            trackName = protocol.ambientTrackName,
+        )
+    }
 
     LaunchedEffect(running, elapsedSeconds) {
-        if (running && elapsedSeconds < totalSeconds) {
+        if (running && elapsedSeconds < protocol.totalSeconds) {
             delay(1000)
             elapsedSeconds += 1
         }
     }
 
+    LaunchedEffect(running, ambientEnabled, protocol.ambientTrackName) {
+        ambientAudioController.setPlaying(running && ambientEnabled)
+    }
+
+    androidx.compose.runtime.DisposableEffect(ambientAudioController) {
+        onDispose { ambientAudioController.release() }
+    }
+
     ScreenFrame(horizontalAlignment = Alignment.CenterHorizontally) {
         Eyebrow("Active session")
         Text(
-            text = recommendation.protocol,
+            text = protocol.title,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp),
         )
+        Text(
+            text = "Cycle ${playbackState.cycleNumber}/${playbackState.cycleCount}",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
         Spacer(modifier = Modifier.height(42.dp))
-        BreathRing(progress = progress)
+        BreathRing(
+            progress = progress,
+            phaseScale = breathScale,
+            phaseLabel = playbackState.phase.label,
+        )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = formatTime(totalSeconds - elapsedSeconds),
+            text = formatTime(protocol.totalSeconds - elapsedSeconds),
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Black,
         )
         Text(
-            text = if ((elapsedSeconds / 4) % 2 == 0) "Inhale through the nose" else "Extend the exhale",
+            text = playbackState.phase.instruction,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+        Text(
+            text = "${playbackState.phase.label}: ${playbackState.phaseRemainingSeconds}s · Next: ${playbackState.nextPhase.label}",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 22.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Ambient layer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Loops when `res/raw/${protocol.ambientTrackName}` exists.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = ambientEnabled,
+                    onCheckedChange = { ambientEnabled = it },
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(42.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -809,7 +882,11 @@ private fun InsightCard(title: String, body: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun BreathRing(progress: Float) {
+private fun BreathRing(
+    progress: Float,
+    phaseScale: Float,
+    phaseLabel: String,
+) {
     val color = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.surfaceVariant
     Canvas(modifier = Modifier.size(220.dp)) {
@@ -827,6 +904,14 @@ private fun BreathRing(progress: Float) {
                 center = Offset(size.width / 2, size.height / 2),
                 radius = size.minDimension / 2,
             ),
+        )
+        drawCircle(
+            color = color.copy(alpha = 0.28f),
+            radius = (size.minDimension * 0.24f * phaseScale).coerceAtMost(size.minDimension * 0.42f),
+        )
+        drawCircle(
+            color = color.copy(alpha = if (phaseLabel == "Hold" || phaseLabel == "Rest") 0.5f else 0.82f),
+            radius = size.minDimension * 0.08f,
         )
     }
 }
@@ -861,4 +946,47 @@ private fun formatTime(seconds: Int): String {
     val minutes = safeSeconds / 60
     val remainder = safeSeconds % 60
     return "$minutes:${remainder.toString().padStart(2, '0')}"
+}
+
+private data class ProtocolPlaybackState(
+    val phase: BreathPhase,
+    val nextPhase: BreathPhase,
+    val phaseRemainingSeconds: Int,
+    val cycleNumber: Int,
+    val cycleCount: Int,
+)
+
+private fun BreathworkProtocol.playbackStateAt(elapsedSeconds: Int): ProtocolPlaybackState {
+    val safePhases = phases.ifEmpty {
+        BreathworkProtocol.postTrainingRecovery(durationMinutes).phases
+    }
+    val cycleLength = safePhases.sumOf { it.seconds }.coerceAtLeast(1)
+    val clampedElapsed = elapsedSeconds.coerceIn(0, (totalSeconds - 1).coerceAtLeast(0))
+    val phaseOffset = clampedElapsed % cycleLength
+    val cycleNumber = (clampedElapsed / cycleLength) + 1
+    val cycleCount = ((totalSeconds + cycleLength - 1) / cycleLength).coerceAtLeast(1)
+    var phaseStart = 0
+
+    safePhases.forEachIndexed { index, phase ->
+        val phaseEnd = phaseStart + phase.seconds
+        if (phaseOffset < phaseEnd) {
+            return ProtocolPlaybackState(
+                phase = phase,
+                nextPhase = safePhases[(index + 1) % safePhases.size],
+                phaseRemainingSeconds = (phaseEnd - phaseOffset).coerceAtLeast(1),
+                cycleNumber = cycleNumber.coerceAtMost(cycleCount),
+                cycleCount = cycleCount,
+            )
+        }
+        phaseStart = phaseEnd
+    }
+
+    val fallback = safePhases.last()
+    return ProtocolPlaybackState(
+        phase = fallback,
+        nextPhase = safePhases.first(),
+        phaseRemainingSeconds = 1,
+        cycleNumber = cycleNumber.coerceAtMost(cycleCount),
+        cycleCount = cycleCount,
+    )
 }
