@@ -63,6 +63,7 @@ import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
+import com.hybridtempo.android.recommendation.RecommendationSource
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
@@ -150,6 +151,8 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
 
                     AppScreen.Recommendation -> RecommendationScreen(
                         recommendation = uiState.recommendation,
+                        recommendationSource = uiState.recommendationSource,
+                        isRefreshingRecommendation = uiState.isRefreshingRecommendation,
                         saveMessage = uiState.saveMessage,
                         onSettings = { screen = AppScreen.Settings },
                         onStartSession = { screen = AppScreen.Session },
@@ -167,6 +170,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
 
                     AppScreen.History -> HistoryScreen(
                         recommendation = uiState.recommendation,
+                        recommendationSource = uiState.recommendationSource,
                         sessions = uiState.recentSessions,
                         checkIns = uiState.recentCheckIns,
                         saveMessage = uiState.saveMessage,
@@ -423,6 +427,8 @@ private fun CheckInScreen(
 @Composable
 private fun RecommendationScreen(
     recommendation: BreathworkRecommendation,
+    recommendationSource: RecommendationSource,
+    isRefreshingRecommendation: Boolean,
     saveMessage: String,
     onSettings: () -> Unit,
     onStartSession: () -> Unit,
@@ -441,6 +447,16 @@ private fun RecommendationScreen(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(top = 10.dp),
+        )
+        Text(
+            text = if (isRefreshingRecommendation) {
+                "Refreshing recommendation..."
+            } else {
+                recommendationSource.label
+            },
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
         )
         InsightCard(
             title = "Why this fits",
@@ -624,6 +640,7 @@ private fun SessionScreen(
 @Composable
 private fun HistoryScreen(
     recommendation: BreathworkRecommendation,
+    recommendationSource: RecommendationSource,
     sessions: List<BreathworkSession>,
     checkIns: List<DailyCheckIn>,
     saveMessage: String,
@@ -648,7 +665,7 @@ private fun HistoryScreen(
         }
         InsightCard(
             title = "Recommended now",
-            body = "${recommendation.protocol} · ${recommendation.durationMinutes} min · ${recommendation.cadence}",
+            body = "${recommendation.protocol} · ${recommendation.durationMinutes} min · ${recommendation.cadence} · ${recommendationSource.label}",
             modifier = Modifier.padding(top = 18.dp),
         )
         trends.latest?.let { latest ->
@@ -1278,3 +1295,9 @@ private fun String.toLocalDateOrNull(): LocalDate? = try {
         null
     }
 }
+
+private val RecommendationSource.label: String
+    get() = when (this) {
+        RecommendationSource.BackendAi -> "AI-backed recommendation"
+        RecommendationSource.DeterministicFallback -> "Local fallback recommendation"
+    }

@@ -14,6 +14,7 @@ import com.hybridtempo.android.recommendation.CheckInContext
 import com.hybridtempo.android.recommendation.RecentTrendContext
 import com.hybridtempo.android.recommendation.RecommendationEngine
 import com.hybridtempo.android.recommendation.RecommendationRequest
+import com.hybridtempo.android.recommendation.RecommendationSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,12 +44,9 @@ data class HybridTempoUiState(
     val hasCompletedOnboarding: Boolean = false,
     val isLoadingProfile: Boolean = true,
     val draft: CheckInDraft = CheckInDraft(),
-    val recommendation: BreathworkRecommendation = BackendRecommendationEngine().recommend(
-        RecommendationRequest(
-            profile = AthleteProfileDraft().toProfileContext(),
-            checkIn = CheckInDraft().toCheckInContext(),
-        ),
-    ).recommendation,
+    val recommendation: BreathworkRecommendation = com.hybridtempo.android.data.BreathworkRecommendation(),
+    val recommendationSource: RecommendationSource = RecommendationSource.DeterministicFallback,
+    val isRefreshingRecommendation: Boolean = false,
     val recentSessions: List<BreathworkSession> = emptyList(),
     val recentCheckIns: List<DailyCheckIn> = emptyList(),
     val saveMessage: String = "Firebase persistence is ready when app/google-services.json is added.",
@@ -82,11 +80,11 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                     hasCompletedOnboarding = true,
                     isLoadingProfile = false,
                     draft = checkInDraft,
-                    recommendation = recommendationFor(checkInDraft, profileDraft, current.recentCheckIns),
                     saveMessage = "Profile loaded from Firestore.",
                 )
             }
         }
+        refreshRecommendation()
     }
 
     fun updateProfileDraft(draft: AthleteProfileDraft) {
@@ -108,11 +106,11 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 it.copy(
                     hasCompletedOnboarding = true,
                     draft = nextDraft,
-                    recommendation = recommendationFor(nextDraft, profileDraft, it.recentCheckIns),
                     isSaving = false,
                     saveMessage = result.message,
                 )
             }
+            refreshRecommendation()
         }
     }
 
@@ -120,9 +118,9 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update {
             it.copy(
                 draft = draft,
-                recommendation = recommendationFor(draft, it.profileDraft, it.recentCheckIns),
             )
         }
+        refreshRecommendation()
     }
 
     fun saveCheckIn() {
@@ -191,23 +189,32 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 val nextCheckIns = if (checkIns.isNotEmpty()) checkIns else listOfNotNull(fallbackCheckIn)
                 it.copy(
                     recentCheckIns = nextCheckIns,
-                    recommendation = recommendationFor(it.draft, it.profileDraft, nextCheckIns),
+                )
+            }
+            refreshRecommendation()
+        }
+    }
+
+    private fun refreshRecommendation() {
+        val state = _uiState.value
+        val request = RecommendationRequest(
+            profile = state.profileDraft.toProfileContext(),
+            checkIn = state.draft.toCheckInContext(),
+            recentTrends = state.recentCheckIns.toTrendContext(),
+        )
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingRecommendation = true) }
+            val response = recommendationEngine.recommend(request)
+            _uiState.update {
+                it.copy(
+                    recommendation = response.recommendation,
+                    recommendationSource = response.source,
+                    isRefreshingRecommendation = false,
                 )
             }
         }
     }
-
-    private fun recommendationFor(
-        draft: CheckInDraft,
-        profile: AthleteProfileDraft,
-        recentCheckIns: List<DailyCheckIn>,
-    ): BreathworkRecommendation = recommendationEngine.recommend(
-        RecommendationRequest(
-            profile = profile.toProfileContext(),
-            checkIn = draft.toCheckInContext(),
-            recentTrends = recentCheckIns.toTrendContext(),
-        ),
-    ).recommendation
 }
 
 private fun CheckInDraft.toDailyCheckIn(): DailyCheckIn = DailyCheckIn(

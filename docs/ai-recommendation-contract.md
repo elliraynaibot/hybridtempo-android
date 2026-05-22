@@ -66,3 +66,20 @@ HybridTempo should not call an AI model directly from the Android app. The app s
 - The app should validate duration, phase seconds, phase labels, and protocol category.
 - If validation fails, use the deterministic fallback.
 - The AI should choose or adapt safe templates, not invent medical or therapeutic advice.
+
+## Android Integration
+
+The Android app calls the callable Firebase Function:
+
+```text
+recommendBreathwork
+```
+
+Requirements:
+
+- `app/google-services.json` must exist.
+- Anonymous Auth must be enabled.
+- The user must be signed in before the callable is invoked.
+- The function must be deployed to `us-central1`.
+
+If the callable fails because Firebase is missing, the user is offline, Auth is unavailable, or the response is invalid, the app uses `DeterministicRecommendationEngine`.

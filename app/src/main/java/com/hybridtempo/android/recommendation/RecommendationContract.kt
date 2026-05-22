@@ -42,5 +42,5 @@ enum class RecommendationSource {
 }
 
 interface RecommendationEngine {
-    fun recommend(request: RecommendationRequest): RecommendationResponse
+    suspend fun recommend(request: RecommendationRequest): RecommendationResponse
 }

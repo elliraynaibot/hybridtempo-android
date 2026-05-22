@@ -4,7 +4,7 @@ import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 
 class DeterministicRecommendationEngine : RecommendationEngine {
-    override fun recommend(request: RecommendationRequest): RecommendationResponse {
+    override suspend fun recommend(request: RecommendationRequest): RecommendationResponse {
         val checkIn = request.checkIn
         val profile = request.profile
         val highLoad = checkIn.workoutIntensity >= 7 || checkIn.soreness >= 7
