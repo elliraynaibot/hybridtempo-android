@@ -7,6 +7,7 @@ data class AthleteProfile(
     val name: String = "",
     val raceDate: String = "",
     val trainingStyle: String = "hybrid",
+    val weeklyTrainingFrequency: Int = 5,
     val goals: List<String> = listOf("recovery", "race prep"),
     val preferredSessionLength: Int = 5,
 )

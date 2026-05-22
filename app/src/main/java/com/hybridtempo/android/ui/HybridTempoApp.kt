@@ -62,6 +62,7 @@ import kotlinx.coroutines.delay
 private enum class AppScreen {
     Onboarding,
     Welcome,
+    Settings,
     CheckIn,
     Recommendation,
     Session,
@@ -72,6 +73,12 @@ private enum class AppScreen {
 fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
     var screen by remember { mutableStateOf(AppScreen.Onboarding) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(uiState.hasCompletedOnboarding, uiState.isLoadingProfile) {
+        if (!uiState.isLoadingProfile && uiState.hasCompletedOnboarding && screen == AppScreen.Onboarding) {
+            screen = AppScreen.Welcome
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -97,6 +104,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                 when (target) {
                     AppScreen.Onboarding -> OnboardingScreen(
                         state = uiState.profileDraft,
+                        isLoading = uiState.isLoadingProfile,
                         onStateChange = viewModel::updateProfileDraft,
                         onComplete = {
                             viewModel.saveProfile()
@@ -107,10 +115,23 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     AppScreen.Welcome -> WelcomeScreen(
                         onStart = { screen = AppScreen.CheckIn },
                         onHistory = { screen = AppScreen.History },
+                        onSettings = { screen = AppScreen.Settings },
+                    )
+
+                    AppScreen.Settings -> SettingsScreen(
+                        state = uiState.profileDraft,
+                        saveMessage = uiState.saveMessage,
+                        onStateChange = viewModel::updateProfileDraft,
+                        onSave = {
+                            viewModel.saveProfile()
+                            screen = AppScreen.Welcome
+                        },
+                        onBack = { screen = AppScreen.Welcome },
                     )
 
                     AppScreen.CheckIn -> CheckInScreen(
                         state = uiState.draft,
+                        onSettings = { screen = AppScreen.Settings },
                         onStateChange = viewModel::updateDraft,
                         onRecommend = {
                             viewModel.saveCheckIn()
@@ -121,12 +142,14 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     AppScreen.Recommendation -> RecommendationScreen(
                         recommendation = uiState.recommendation,
                         saveMessage = uiState.saveMessage,
+                        onSettings = { screen = AppScreen.Settings },
                         onStartSession = { screen = AppScreen.Session },
                         onEdit = { screen = AppScreen.CheckIn },
                     )
 
                     AppScreen.Session -> SessionScreen(
                         recommendation = uiState.recommendation,
+                        onSettings = { screen = AppScreen.Settings },
                         onFinish = {
                             viewModel.completeCurrentSession()
                             screen = AppScreen.History
@@ -137,6 +160,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         recommendation = uiState.recommendation,
                         sessions = uiState.recentSessions,
                         saveMessage = uiState.saveMessage,
+                        onSettings = { screen = AppScreen.Settings },
                         onCheckIn = { screen = AppScreen.CheckIn },
                     )
                 }
@@ -148,19 +172,91 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
 @Composable
 private fun OnboardingScreen(
     state: AthleteProfileDraft,
+    isLoading: Boolean,
     onStateChange: (AthleteProfileDraft) -> Unit,
     onComplete: () -> Unit,
 ) {
+    if (isLoading) {
+        ScreenFrame(horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(modifier = Modifier.height(120.dp))
+            BrandMark()
+            Text(
+                text = "Loading athlete profile",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 24.dp),
+            )
+        }
+        return
+    }
+
+    ProfileFormScreen(
+        eyebrow = "Athlete setup",
+        title = "Tune breathwork around your training.",
+        body = "A short profile gives the recommendation engine better defaults without making the app feel heavy.",
+        action = "Save athlete profile",
+        state = state,
+        onStateChange = onStateChange,
+        onAction = onComplete,
+    )
+}
+
+@Composable
+private fun SettingsScreen(
+    state: AthleteProfileDraft,
+    saveMessage: String,
+    onStateChange: (AthleteProfileDraft) -> Unit,
+    onSave: () -> Unit,
+    onBack: () -> Unit,
+) {
+    ProfileFormScreen(
+        eyebrow = "Profile settings",
+        title = "Edit your athlete defaults.",
+        body = "These values shape future recommendations and are saved as your reusable training profile.",
+        action = "Save changes",
+        state = state,
+        footer = {
+            InsightCard(
+                title = "Sync status",
+                body = saveMessage,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            ) {
+                Text("Back")
+            }
+        },
+        onStateChange = onStateChange,
+        onAction = onSave,
+    )
+}
+
+@Composable
+private fun ProfileFormScreen(
+    eyebrow: String,
+    title: String,
+    body: String,
+    action: String,
+    state: AthleteProfileDraft,
+    footer: @Composable ColumnScope.() -> Unit = {},
+    onStateChange: (AthleteProfileDraft) -> Unit,
+    onAction: () -> Unit,
+) {
     ScreenFrame {
-        Eyebrow("Athlete setup")
+        Eyebrow(eyebrow)
         Text(
-            text = "Tune breathwork around your training.",
+            text = title,
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 10.dp),
         )
         Text(
-            text = "A short profile gives the recommendation engine better defaults without making the app feel heavy.",
+            text = body,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
@@ -210,7 +306,8 @@ private fun OnboardingScreen(
             },
         )
         Spacer(modifier = Modifier.height(30.dp))
-        PrimaryAction(text = "Save athlete profile", onClick = onComplete)
+        PrimaryAction(text = action, onClick = onAction)
+        footer()
     }
 }
 
@@ -218,6 +315,7 @@ private fun OnboardingScreen(
 private fun WelcomeScreen(
     onStart: () -> Unit,
     onHistory: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     ScreenFrame {
         Spacer(modifier = Modifier.height(28.dp))
@@ -252,12 +350,21 @@ private fun WelcomeScreen(
         ) {
             Text("View history")
         }
+        OutlinedButton(
+            onClick = onSettings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Profile settings")
+        }
     }
 }
 
 @Composable
 private fun CheckInScreen(
     state: CheckInDraft,
+    onSettings: () -> Unit,
     onStateChange: (CheckInDraft) -> Unit,
     onRecommend: () -> Unit,
 ) {
@@ -292,6 +399,14 @@ private fun CheckInScreen(
         )
         Spacer(modifier = Modifier.height(30.dp))
         PrimaryAction(text = "Get recommendation", onClick = onRecommend)
+        OutlinedButton(
+            onClick = onSettings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Profile settings")
+        }
     }
 }
 
@@ -299,6 +414,7 @@ private fun CheckInScreen(
 private fun RecommendationScreen(
     recommendation: BreathworkRecommendation,
     saveMessage: String,
+    onSettings: () -> Unit,
     onStartSession: () -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -341,12 +457,21 @@ private fun RecommendationScreen(
         ) {
             Text("Adjust check-in")
         }
+        OutlinedButton(
+            onClick = onSettings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Profile settings")
+        }
     }
 }
 
 @Composable
 private fun SessionScreen(
     recommendation: BreathworkRecommendation,
+    onSettings: () -> Unit,
     onFinish: () -> Unit,
 ) {
     var elapsedSeconds by remember { mutableIntStateOf(0) }
@@ -407,6 +532,14 @@ private fun SessionScreen(
                 Text("Finish", color = MaterialTheme.colorScheme.onPrimary)
             }
         }
+        OutlinedButton(
+            onClick = onSettings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Profile settings")
+        }
     }
 }
 
@@ -415,6 +548,7 @@ private fun HistoryScreen(
     recommendation: BreathworkRecommendation,
     sessions: List<BreathworkSession>,
     saveMessage: String,
+    onSettings: () -> Unit,
     onCheckIn: () -> Unit,
 ) {
     ScreenFrame {
@@ -445,6 +579,14 @@ private fun HistoryScreen(
         }
         Spacer(modifier = Modifier.height(36.dp))
         PrimaryAction(text = "New check-in", onClick = onCheckIn)
+        OutlinedButton(
+            onClick = onSettings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Profile settings")
+        }
     }
 }
 

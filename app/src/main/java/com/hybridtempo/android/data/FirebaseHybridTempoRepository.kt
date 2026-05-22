@@ -13,6 +13,27 @@ class FirebaseHybridTempoRepository(
     private val isConfigured: Boolean
         get() = FirebaseApp.getApps(context).isNotEmpty()
 
+    override suspend fun currentProfile(): AthleteProfile? {
+        if (!isConfigured) return null
+        val userId = requireUserId()
+        val document = firestore()
+            .collection("users")
+            .document(userId)
+            .get()
+            .await()
+
+        if (!document.exists()) return null
+
+        return AthleteProfile(
+            name = document.getString("name").orEmpty(),
+            raceDate = document.getString("raceDate").orEmpty(),
+            trainingStyle = document.getString("trainingStyle") ?: "Hybrid",
+            weeklyTrainingFrequency = document.getLong("weeklyTrainingFrequency")?.toInt() ?: 5,
+            goals = document.get("goals").asStringList().ifEmpty { listOf("recovery", "race prep") },
+            preferredSessionLength = document.getLong("preferredSessionLength")?.toInt() ?: 5,
+        )
+    }
+
     override suspend fun upsertProfile(profile: AthleteProfile): SaveResult = withUserDocument { userId ->
         firestore()
             .collection("users")
@@ -107,6 +128,7 @@ private fun AthleteProfile.toFirestoreMap(): Map<String, Any> = mapOf(
     "name" to name,
     "raceDate" to raceDate,
     "trainingStyle" to trainingStyle,
+    "weeklyTrainingFrequency" to weeklyTrainingFrequency,
     "goals" to goals,
     "preferredSessionLength" to preferredSessionLength,
 )
@@ -139,3 +161,7 @@ private fun BreathworkSession.toFirestoreMap(): Map<String, Any> = mapOf(
     "completed" to completed,
     "completedAt" to completedAt,
 )
+
+private fun Any?.asStringList(): List<String> = (this as? List<*>)
+    ?.filterIsInstance<String>()
+    .orEmpty()

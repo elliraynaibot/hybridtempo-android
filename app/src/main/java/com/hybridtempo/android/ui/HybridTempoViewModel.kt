@@ -35,6 +35,7 @@ data class AthleteProfileDraft(
 data class HybridTempoUiState(
     val profileDraft: AthleteProfileDraft = AthleteProfileDraft(),
     val hasCompletedOnboarding: Boolean = false,
+    val isLoadingProfile: Boolean = true,
     val draft: CheckInDraft = CheckInDraft(),
     val recommendation: BreathworkRecommendation = buildRecommendation(
         draft = CheckInDraft(),
@@ -52,7 +53,28 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         viewModelScope.launch {
+            loadProfile()
             refreshHistory()
+        }
+    }
+
+    private suspend fun loadProfile() {
+        val profile = runCatching { repository.currentProfile() }.getOrNull()
+        _uiState.update { current ->
+            if (profile == null) {
+                current.copy(isLoadingProfile = false)
+            } else {
+                val profileDraft = profile.toAthleteProfileDraft()
+                val checkInDraft = current.draft.copy(timeAvailable = profile.preferredSessionLength)
+                current.copy(
+                    profileDraft = profileDraft,
+                    hasCompletedOnboarding = true,
+                    isLoadingProfile = false,
+                    draft = checkInDraft,
+                    recommendation = buildRecommendation(checkInDraft, profileDraft),
+                    saveMessage = "Profile loaded from Firestore.",
+                )
+            }
         }
     }
 
@@ -211,6 +233,16 @@ private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProf
     name = name,
     raceDate = raceDate,
     trainingStyle = trainingStyle,
+    weeklyTrainingFrequency = weeklyTrainingFrequency,
+    goals = goals,
+    preferredSessionLength = preferredSessionLength,
+)
+
+private fun AthleteProfile.toAthleteProfileDraft(): AthleteProfileDraft = AthleteProfileDraft(
+    name = name,
+    raceDate = raceDate,
+    trainingStyle = trainingStyle,
+    weeklyTrainingFrequency = weeklyTrainingFrequency,
     goals = goals,
     preferredSessionLength = preferredSessionLength,
 )
