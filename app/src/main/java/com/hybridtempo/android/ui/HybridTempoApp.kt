@@ -62,6 +62,9 @@ import com.hybridtempo.android.data.BreathPhase
 import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
 import kotlinx.coroutines.delay
 
 private enum class AppScreen {
@@ -624,32 +627,57 @@ private fun HistoryScreen(
     onSettings: () -> Unit,
     onCheckIn: () -> Unit,
 ) {
+    val summary = remember(sessions) { sessions.toHistorySummary() }
+
     ScreenFrame {
         Eyebrow("History")
         Text(
-            text = "Build awareness over time.",
+            text = "Recovery consistency, not noise.",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
         )
-        MetricStrip()
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            MetricCard(summary.currentStreak.toString(), "day streak", Modifier.weight(1f))
+            MetricCard(summary.totalSessions.toString(), "sessions", Modifier.weight(1f))
+            MetricCard(summary.totalMinutes.toString(), "minutes", Modifier.weight(1f))
+        }
         InsightCard(
-            title = "Latest recommendation",
+            title = "Recommended now",
             body = "${recommendation.protocol} · ${recommendation.durationMinutes} min · ${recommendation.cadence}",
             modifier = Modifier.padding(top = 18.dp),
         )
-        InsightCard(
-            title = "Persistence",
-            body = saveMessage,
-            modifier = Modifier.padding(top = 14.dp),
-        )
-        sessions.forEach { session ->
+        if (sessions.isEmpty()) {
             InsightCard(
-                title = session.protocol,
-                body = "${session.durationMinutes} min · ${session.cadence} · ${session.completedAt}",
-                modifier = Modifier.padding(top = 14.dp),
+                title = "No completed sessions yet",
+                body = "Finish your first protocol and this screen becomes your recovery log. The goal is repeatable regulation after training.",
+                modifier = Modifier.padding(top = 18.dp),
             )
+        } else {
+            Text(
+                text = "Protocol mix",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 24.dp, bottom = 10.dp),
+            )
+            summary.protocolMix.forEach { item ->
+                ProgressRow(label = item.protocol, count = item.count, total = summary.totalSessions)
+            }
+            Text(
+                text = "Recent sessions",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
+            )
+            sessions.take(6).forEach { session ->
+                SessionRow(session = session)
+            }
         }
+        InsightCard(
+            title = "Sync status",
+            body = saveMessage,
+            modifier = Modifier.padding(top = 18.dp),
+        )
         Spacer(modifier = Modifier.height(36.dp))
         PrimaryAction(text = "New check-in", onClick = onCheckIn)
         OutlinedButton(
@@ -882,6 +910,80 @@ private fun InsightCard(title: String, body: String, modifier: Modifier = Modifi
 }
 
 @Composable
+private fun ProgressRow(label: String, count: Int, total: Int) {
+    val fraction = if (total <= 0) 0f else count.toFloat() / total.toFloat()
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("$count", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction.coerceIn(0.04f, 1f))
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionRow(session: BreathworkSession) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(session.protocol, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    session.completedAt.toHistoryDateLabel(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Text(
+                "${session.durationMinutes}m",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+    }
+}
+
+@Composable
 private fun BreathRing(
     progress: Float,
     phaseScale: Float,
@@ -956,6 +1058,18 @@ private data class ProtocolPlaybackState(
     val cycleCount: Int,
 )
 
+private data class HistorySummary(
+    val totalSessions: Int,
+    val totalMinutes: Int,
+    val currentStreak: Int,
+    val protocolMix: List<ProtocolMixItem>,
+)
+
+private data class ProtocolMixItem(
+    val protocol: String,
+    val count: Int,
+)
+
 private fun BreathworkProtocol.playbackStateAt(elapsedSeconds: Int): ProtocolPlaybackState {
     val safePhases = phases.ifEmpty {
         BreathworkProtocol.postTrainingRecovery(durationMinutes).phases
@@ -989,4 +1103,53 @@ private fun BreathworkProtocol.playbackStateAt(elapsedSeconds: Int): ProtocolPla
         cycleNumber = cycleNumber.coerceAtMost(cycleCount),
         cycleCount = cycleCount,
     )
+}
+
+private fun List<BreathworkSession>.toHistorySummary(): HistorySummary {
+    val completedSessions = filter { it.completed }
+    return HistorySummary(
+        totalSessions = completedSessions.size,
+        totalMinutes = completedSessions.sumOf { it.durationMinutes },
+        currentStreak = completedSessions.currentStreak(),
+        protocolMix = completedSessions
+            .groupingBy { it.protocol }
+            .eachCount()
+            .map { (protocol, count) -> ProtocolMixItem(protocol = protocol, count = count) }
+            .sortedWith(compareByDescending<ProtocolMixItem> { it.count }.thenBy { it.protocol }),
+    )
+}
+
+private fun List<BreathworkSession>.currentStreak(): Int {
+    val completedDates = mapNotNull { it.completedAt.toLocalDateOrNull() }.toSet()
+    if (completedDates.isEmpty()) return 0
+
+    var cursor = LocalDate.now()
+    if (cursor !in completedDates && cursor.minusDays(1) in completedDates) {
+        cursor = cursor.minusDays(1)
+    }
+
+    var streak = 0
+    while (cursor in completedDates) {
+        streak += 1
+        cursor = cursor.minusDays(1)
+    }
+    return streak
+}
+
+private fun String.toHistoryDateLabel(): String = toLocalDateOrNull()?.let { date ->
+    when (date) {
+        LocalDate.now() -> "Today"
+        LocalDate.now().minusDays(1) -> "Yesterday"
+        else -> date.toString()
+    }
+} ?: "Recently completed"
+
+private fun String.toLocalDateOrNull(): LocalDate? = try {
+    OffsetDateTime.parse(this).toLocalDate()
+} catch (_: DateTimeParseException) {
+    try {
+        LocalDate.parse(this.take(10))
+    } catch (_: DateTimeParseException) {
+        null
+    }
 }
