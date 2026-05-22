@@ -1,6 +1,8 @@
 import {initializeApp} from "firebase-admin/app";
+import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {setGlobalOptions} from "firebase-functions/v2";
+import {currentUtcDateKey, quotaStatus} from "./quota";
 
 initializeApp();
 
@@ -30,7 +32,17 @@ type RecommendationResponse = {
   rationale: string;
   cadence: string;
   source: "deterministicFallback";
+  quota: RecommendationQuota;
   breathworkProtocol: BreathworkProtocol;
+};
+
+type RecommendationResult = Omit<RecommendationResponse, "quota">;
+
+type RecommendationQuota = {
+  limit: number;
+  used: number;
+  remaining: number;
+  resetDate: string;
 };
 
 type RecommendationRequest = {
@@ -58,15 +70,68 @@ type RecommendationRequest = {
 
 export const recommendBreathwork = onCall<RecommendationRequest>(
   {enforceAppCheck: false},
-  (request): RecommendationResponse => {
+  async (request): Promise<RecommendationResponse> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in before requesting a recommendation.");
     }
 
     const payload = validateRecommendationRequest(request.data);
-    return deterministicRecommendation(payload);
+    const quota = await reserveDailyRecommendation(request.auth.uid);
+    return {
+      ...deterministicRecommendation(payload),
+      quota,
+    };
   },
 );
+
+async function reserveDailyRecommendation(uid: string): Promise<RecommendationQuota> {
+  const db = getFirestore();
+  const resetDate = currentUtcDateKey();
+  const usageRef = db.doc(`users/${uid}/aiRecommendationUsage/${resetDate}`);
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(usageRef);
+    const currentStatus = quotaStatus(snapshot.get("count"));
+
+    if (currentStatus.isExceeded) {
+      throw new HttpsError(
+        "resource-exhausted",
+        dailyLimitMessage(currentStatus.limit),
+        {
+          limit: currentStatus.limit,
+          used: currentStatus.used,
+          remaining: 0,
+          resetDate,
+        },
+      );
+    }
+
+    const used = currentStatus.used + 1;
+    const quota: RecommendationQuota = {
+      limit: currentStatus.limit,
+      used,
+      remaining: Math.max(currentStatus.limit - used, 0),
+      resetDate,
+    };
+    const update: Record<string, unknown> = {
+      count: used,
+      resetDate,
+      updatedAt: FieldValue.serverTimestamp(),
+      lastRequestedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (!snapshot.exists) {
+      update.createdAt = FieldValue.serverTimestamp();
+    }
+
+    transaction.set(usageRef, update, {merge: true});
+    return quota;
+  });
+}
+
+function dailyLimitMessage(limit: number): string {
+  return `You have used today's ${limit} AI recommendations. Use the local protocol for now and check back tomorrow.`;
+}
 
 function validateRecommendationRequest(data: unknown): RecommendationRequest {
   if (!isRecord(data)) {
@@ -107,7 +172,7 @@ function validateRecommendationRequest(data: unknown): RecommendationRequest {
   return request;
 }
 
-function deterministicRecommendation(request: RecommendationRequest): RecommendationResponse {
+function deterministicRecommendation(request: RecommendationRequest): RecommendationResult {
   const checkIn = request.checkIn;
   const goals = request.profile.goals;
   const highLoad = checkIn.workoutIntensity >= 7 || checkIn.soreness >= 7;

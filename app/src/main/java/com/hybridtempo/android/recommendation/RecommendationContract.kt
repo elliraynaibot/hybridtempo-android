@@ -34,13 +34,23 @@ data class RecentTrendContext(
 data class RecommendationResponse(
     val recommendation: BreathworkRecommendation,
     val source: RecommendationSource,
+    val quota: RecommendationQuota? = null,
+    val notice: String? = null,
 )
 
 enum class RecommendationSource {
     DeterministicFallback,
     BackendAi,
+    DailyLimitReached,
 }
 
 interface RecommendationEngine {
     suspend fun recommend(request: RecommendationRequest): RecommendationResponse
 }
+
+data class RecommendationQuota(
+    val limit: Int,
+    val used: Int,
+    val remaining: Int,
+    val resetDate: String,
+)

@@ -69,6 +69,7 @@ import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
+import com.hybridtempo.android.recommendation.RecommendationQuota
 import com.hybridtempo.android.recommendation.RecommendationSource
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -150,7 +151,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         onSettings = { screen = AppScreen.Settings },
                         onStateChange = viewModel::updateDraft,
                         onRecommend = {
-                            viewModel.saveCheckIn()
+                            viewModel.requestRecommendationAndSaveCheckIn()
                             screen = AppScreen.Recommendation
                         },
                     )
@@ -158,6 +159,8 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     AppScreen.Recommendation -> RecommendationScreen(
                         recommendation = uiState.recommendation,
                         recommendationSource = uiState.recommendationSource,
+                        recommendationQuota = uiState.recommendationQuota,
+                        recommendationNotice = uiState.recommendationNotice,
                         isRefreshingRecommendation = uiState.isRefreshingRecommendation,
                         saveMessage = uiState.saveMessage,
                         onSettings = { screen = AppScreen.Settings },
@@ -438,6 +441,8 @@ private fun CheckInScreen(
 private fun RecommendationScreen(
     recommendation: BreathworkRecommendation,
     recommendationSource: RecommendationSource,
+    recommendationQuota: RecommendationQuota?,
+    recommendationNotice: String?,
     isRefreshingRecommendation: Boolean,
     saveMessage: String,
     onSettings: () -> Unit,
@@ -478,6 +483,14 @@ private fun RecommendationScreen(
             body = recommendation.cadence,
             modifier = Modifier.padding(top = 14.dp),
         )
+        val quotaMessage = recommendationNotice ?: recommendationQuota?.toUsageMessage()
+        quotaMessage?.let {
+            InsightCard(
+                title = "AI usage",
+                body = it,
+                modifier = Modifier.padding(top = 14.dp),
+            )
+        }
         InsightCard(
             title = "Persistence",
             body = saveMessage,
@@ -1379,7 +1392,16 @@ private val RecommendationSource.label: String
     get() = when (this) {
         RecommendationSource.BackendAi -> "AI-backed recommendation"
         RecommendationSource.DeterministicFallback -> "Local fallback recommendation"
+        RecommendationSource.DailyLimitReached -> "Daily AI limit reached"
     }
+
+private fun RecommendationQuota.toUsageMessage(): String {
+    if (remaining <= 0) {
+        return "You have used all $limit AI recommendations for today. The local protocol still works, so save AI requests for meaningful check-ins and come back tomorrow."
+    }
+
+    return "$remaining of $limit AI recommendations left today. Slider changes use a local preview, and only this button uses AI."
+}
 
 private fun android.content.Context.hasNotificationPermission(): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true

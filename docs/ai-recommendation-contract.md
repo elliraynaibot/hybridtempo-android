@@ -37,6 +37,12 @@ HybridTempo should not call an AI model directly from the Android app. The app s
   "durationMinutes": 5,
   "rationale": "High training load with elevated soreness.",
   "cadence": "4 second inhale · 6 second exhale",
+  "quota": {
+    "limit": 5,
+    "used": 1,
+    "remaining": 4,
+    "resetDate": "2026-05-22"
+  },
   "breathworkProtocol": {
     "category": "downregulation",
     "title": "Downregulation",
@@ -66,6 +72,8 @@ HybridTempo should not call an AI model directly from the Android app. The app s
 - The app should validate duration, phase seconds, phase labels, and protocol category.
 - If validation fails, use the deterministic fallback.
 - The AI should choose or adapt safe templates, not invent medical or therapeutic advice.
+- The backend enforces a server-side cap of 5 AI recommendations per user per UTC day.
+- If the daily cap is reached, the function returns `resource-exhausted`; the app should use the deterministic fallback and explain that the local protocol still works.
 
 ## Android Integration
 
@@ -82,4 +90,6 @@ Requirements:
 - The user must be signed in before the callable is invoked.
 - The function must be deployed to `us-central1`.
 
-If the callable fails because Firebase is missing, the user is offline, Auth is unavailable, or the response is invalid, the app uses `DeterministicRecommendationEngine`.
+If the callable fails because Firebase is missing, the user is offline, Auth is unavailable, the quota is exhausted, or the response is invalid, the app uses `DeterministicRecommendationEngine`.
+
+The app should only call the backend when the user taps `Get recommendation`. Live slider edits should use the deterministic local preview so casual adjustments do not consume quota.

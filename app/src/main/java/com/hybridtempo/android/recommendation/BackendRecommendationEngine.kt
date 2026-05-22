@@ -2,6 +2,7 @@ package com.hybridtempo.android.recommendation
 
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import com.hybridtempo.android.data.BreathPhase
 import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
@@ -18,18 +19,31 @@ class BackendRecommendationEngine(
         val functions = runCatching { functionsProvider() }.getOrNull()
             ?: return fallback.recommend(request)
 
-        return runCatching {
+        return try {
             val result = functions
                 .getHttpsCallable("recommendBreathwork")
                 .call(request.toCallableMap())
                 .await()
+            val data = result.data.asMap()
 
             RecommendationResponse(
-                recommendation = result.data.asRecommendation(),
+                recommendation = data.asRecommendation(),
                 source = RecommendationSource.BackendAi,
+                quota = data["quota"].asQuotaOrNull(),
             )
-        }.getOrElse {
-            fallback.recommend(request)
+        } catch (error: Throwable) {
+            val fallbackResponse = fallback.recommend(request)
+            if (error.isDailyLimitError()) {
+                fallbackResponse.copy(
+                    source = RecommendationSource.DailyLimitReached,
+                    quota = (error as FirebaseFunctionsException).details.asQuotaOrNull()
+                        ?: RecommendationQuota(limit = 5, used = 5, remaining = 0, resetDate = ""),
+                    notice = error.message
+                        ?: "You have used today's AI recommendations. Use the local protocol for now and check back tomorrow.",
+                )
+            } else {
+                fallbackResponse
+            }
         }
     }
 }
@@ -68,6 +82,19 @@ private fun Any?.asRecommendation(): BreathworkRecommendation {
         rationale = map["rationale"].asString().ifBlank { "A recovery-focused protocol was selected for your current state." },
         cadence = map["cadence"].asString().ifBlank { "4 second inhale · 5 second exhale" },
         breathworkProtocol = map["breathworkProtocol"].asProtocol(duration, protocol),
+    )
+}
+
+private fun Any?.asQuotaOrNull(): RecommendationQuota? {
+    val map = asMap()
+    val limit = map["limit"].asInt()
+    if (limit <= 0) return null
+
+    return RecommendationQuota(
+        limit = limit,
+        used = map["used"].asInt().coerceAtLeast(0),
+        remaining = map["remaining"].asInt().coerceAtLeast(0),
+        resetDate = map["resetDate"].asString(),
     )
 }
 
@@ -123,3 +150,6 @@ private fun Any?.asFloat(): Float = when (this) {
     is String -> toFloatOrNull() ?: 0f
     else -> 0f
 }
+
+private fun Throwable.isDailyLimitError(): Boolean =
+    this is FirebaseFunctionsException && code == FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED

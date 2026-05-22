@@ -11,8 +11,10 @@ import com.hybridtempo.android.data.FirebaseHybridTempoRepository
 import com.hybridtempo.android.recommendation.AthleteProfileContext
 import com.hybridtempo.android.recommendation.BackendRecommendationEngine
 import com.hybridtempo.android.recommendation.CheckInContext
+import com.hybridtempo.android.recommendation.DeterministicRecommendationEngine
 import com.hybridtempo.android.recommendation.RecentTrendContext
 import com.hybridtempo.android.recommendation.RecommendationEngine
+import com.hybridtempo.android.recommendation.RecommendationQuota
 import com.hybridtempo.android.recommendation.RecommendationRequest
 import com.hybridtempo.android.recommendation.RecommendationSource
 import com.hybridtempo.android.notifications.RecoveryReminderScheduler
@@ -50,6 +52,8 @@ data class HybridTempoUiState(
     val draft: CheckInDraft = CheckInDraft(),
     val recommendation: BreathworkRecommendation = com.hybridtempo.android.data.BreathworkRecommendation(),
     val recommendationSource: RecommendationSource = RecommendationSource.DeterministicFallback,
+    val recommendationQuota: RecommendationQuota? = null,
+    val recommendationNotice: String? = null,
     val isRefreshingRecommendation: Boolean = false,
     val recentSessions: List<BreathworkSession> = emptyList(),
     val recentCheckIns: List<DailyCheckIn> = emptyList(),
@@ -59,7 +63,8 @@ data class HybridTempoUiState(
 
 class HybridTempoViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FirebaseHybridTempoRepository(application.applicationContext)
-    private val recommendationEngine: RecommendationEngine = BackendRecommendationEngine()
+    private val previewRecommendationEngine: RecommendationEngine = DeterministicRecommendationEngine()
+    private val backendRecommendationEngine: RecommendationEngine = BackendRecommendationEngine()
     private val reminderScheduler = RecoveryReminderScheduler(application.applicationContext)
     private val _uiState = MutableStateFlow(HybridTempoUiState())
     val uiState: StateFlow<HybridTempoUiState> = _uiState.asStateFlow()
@@ -96,7 +101,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 minute = it.eveningReminderMinute,
             )
         }
-        refreshRecommendation()
+        refreshPreviewRecommendation()
     }
 
     fun updateProfileDraft(draft: AthleteProfileDraft) {
@@ -127,7 +132,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 hour = profileDraft.eveningReminderHour,
                 minute = profileDraft.eveningReminderMinute,
             )
-            refreshRecommendation()
+            refreshPreviewRecommendation()
         }
     }
 
@@ -137,27 +142,41 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 draft = draft,
             )
         }
-        refreshRecommendation()
+        refreshPreviewRecommendation()
     }
 
-    fun saveCheckIn() {
+    fun requestRecommendationAndSaveCheckIn() {
         val state = _uiState.value
         val checkIn = state.draft.toDailyCheckIn()
+        val request = state.toRecommendationRequest()
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true) }
+            _uiState.update {
+                it.copy(
+                    isSaving = true,
+                    isRefreshingRecommendation = true,
+                    recommendationNotice = null,
+                    saveMessage = "Getting recommendation and saving check-in...",
+                )
+            }
+            val response = backendRecommendationEngine.recommend(request)
             val result = runCatching {
-                repository.saveCheckIn(checkIn, state.recommendation)
+                repository.saveCheckIn(checkIn, response.recommendation)
             }.fold(
                 onSuccess = { it },
                 onFailure = { com.hybridtempo.android.data.SaveResult(false, it.message ?: "Check-in kept in memory.") },
             )
             _uiState.update {
                 it.copy(
+                    recommendation = response.recommendation,
+                    recommendationSource = response.source,
+                    recommendationQuota = response.quota,
+                    recommendationNotice = response.notice,
+                    isRefreshingRecommendation = false,
                     isSaving = false,
                     saveMessage = result.message,
                 )
             }
-            refreshCheckIns(checkIn)
+            refreshCheckIns(checkIn, refreshPreview = false)
         }
     }
 
@@ -199,7 +218,10 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private fun refreshCheckIns(fallbackCheckIn: DailyCheckIn? = null) {
+    private fun refreshCheckIns(
+        fallbackCheckIn: DailyCheckIn? = null,
+        refreshPreview: Boolean = true,
+    ) {
         viewModelScope.launch {
             val checkIns = runCatching { repository.recentCheckIns() }.getOrDefault(emptyList())
             _uiState.update {
@@ -208,31 +230,33 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                     recentCheckIns = nextCheckIns,
                 )
             }
-            refreshRecommendation()
+            if (refreshPreview) {
+                refreshPreviewRecommendation()
+            }
         }
     }
 
-    private fun refreshRecommendation() {
-        val state = _uiState.value
-        val request = RecommendationRequest(
-            profile = state.profileDraft.toProfileContext(),
-            checkIn = state.draft.toCheckInContext(),
-            recentTrends = state.recentCheckIns.toTrendContext(),
-        )
+    private fun refreshPreviewRecommendation() {
+        val request = _uiState.value.toRecommendationRequest()
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshingRecommendation = true) }
-            val response = recommendationEngine.recommend(request)
+            val response = previewRecommendationEngine.recommend(request)
             _uiState.update {
                 it.copy(
                     recommendation = response.recommendation,
                     recommendationSource = response.source,
-                    isRefreshingRecommendation = false,
+                    recommendationNotice = null,
                 )
             }
         }
     }
 }
+
+private fun HybridTempoUiState.toRecommendationRequest(): RecommendationRequest = RecommendationRequest(
+    profile = profileDraft.toProfileContext(),
+    checkIn = draft.toCheckInContext(),
+    recentTrends = recentCheckIns.toTrendContext(),
+)
 
 private fun CheckInDraft.toDailyCheckIn(): DailyCheckIn = DailyCheckIn(
     energy = energy,
