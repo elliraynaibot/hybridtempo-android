@@ -24,3 +24,5 @@ The app is wired for Firebase Auth and Firestore, but it does not commit Firebas
 4. Rebuild the app.
 
 Without `app/google-services.json`, the UI still runs but shows preview persistence messaging instead of writing to Firestore.
+
+See [docs/firebase-setup.md](docs/firebase-setup.md) for Auth and Firestore rules setup.
