@@ -61,6 +61,35 @@ class FirebaseHybridTempoRepository(
         SaveResult(persisted = true, message = "Check-in saved to Firestore.")
     }
 
+    override suspend fun recentCheckIns(limit: Long): List<DailyCheckIn> {
+        if (!isConfigured) return emptyList()
+        val userId = currentUserId() ?: return emptyList()
+
+        return firestore()
+            .collection("users")
+            .document(userId)
+            .collection("checkins")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(limit)
+            .get()
+            .await()
+            .documents
+            .map { document ->
+                DailyCheckIn(
+                    date = document.getString("date").orEmpty(),
+                    energy = document.getLong("energy")?.toInt() ?: 0,
+                    soreness = document.getLong("soreness")?.toInt() ?: 0,
+                    stress = document.getLong("stress")?.toInt() ?: 0,
+                    mood = document.getString("mood").orEmpty(),
+                    timeAvailable = document.getLong("timeAvailable")?.toInt() ?: 0,
+                    workoutType = document.getString("workoutType").orEmpty(),
+                    workoutDurationMinutes = document.getLong("workoutDurationMinutes")?.toInt() ?: 0,
+                    workoutIntensity = document.getLong("workoutIntensity")?.toInt() ?: 0,
+                    createdAt = document.getString("createdAt").orEmpty(),
+                )
+            }
+    }
+
     override suspend fun completeSession(session: BreathworkSession): SaveResult = withUserDocument { userId ->
         val document = firestore()
             .collection("users")

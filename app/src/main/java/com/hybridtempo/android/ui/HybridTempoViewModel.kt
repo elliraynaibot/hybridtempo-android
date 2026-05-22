@@ -43,6 +43,7 @@ data class HybridTempoUiState(
         profile = AthleteProfileDraft(),
     ),
     val recentSessions: List<BreathworkSession> = emptyList(),
+    val recentCheckIns: List<DailyCheckIn> = emptyList(),
     val saveMessage: String = "Firebase persistence is ready when app/google-services.json is added.",
     val isSaving: Boolean = false,
 )
@@ -56,6 +57,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             loadProfile()
             refreshHistory()
+            refreshCheckIns()
         }
     }
 
@@ -132,6 +134,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                     saveMessage = result.message,
                 )
             }
+            refreshCheckIns(checkIn)
         }
     }
 
@@ -168,6 +171,17 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update {
                 it.copy(
                     recentSessions = if (sessions.isNotEmpty()) sessions else listOfNotNull(fallbackSession),
+                )
+            }
+        }
+    }
+
+    private fun refreshCheckIns(fallbackCheckIn: DailyCheckIn? = null) {
+        viewModelScope.launch {
+            val checkIns = runCatching { repository.recentCheckIns() }.getOrDefault(emptyList())
+            _uiState.update {
+                it.copy(
+                    recentCheckIns = if (checkIns.isNotEmpty()) checkIns else listOfNotNull(fallbackCheckIn),
                 )
             }
         }

@@ -62,6 +62,7 @@ import com.hybridtempo.android.data.BreathPhase
 import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
+import com.hybridtempo.android.data.DailyCheckIn
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
@@ -167,6 +168,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     AppScreen.History -> HistoryScreen(
                         recommendation = uiState.recommendation,
                         sessions = uiState.recentSessions,
+                        checkIns = uiState.recentCheckIns,
                         saveMessage = uiState.saveMessage,
                         onSettings = { screen = AppScreen.Settings },
                         onCheckIn = { screen = AppScreen.CheckIn },
@@ -623,11 +625,13 @@ private fun SessionScreen(
 private fun HistoryScreen(
     recommendation: BreathworkRecommendation,
     sessions: List<BreathworkSession>,
+    checkIns: List<DailyCheckIn>,
     saveMessage: String,
     onSettings: () -> Unit,
     onCheckIn: () -> Unit,
 ) {
     val summary = remember(sessions) { sessions.toHistorySummary() }
+    val trends = remember(checkIns) { checkIns.toRecoveryTrends() }
 
     ScreenFrame {
         Eyebrow("History")
@@ -647,6 +651,29 @@ private fun HistoryScreen(
             body = "${recommendation.protocol} · ${recommendation.durationMinutes} min · ${recommendation.cadence}",
             modifier = Modifier.padding(top = 18.dp),
         )
+        trends.latest?.let { latest ->
+            InsightCard(
+                title = "Today's state",
+                body = "Energy ${latest.energy}/10 · Stress ${latest.stress}/10 · Soreness ${latest.soreness}/10 · ${latest.workoutType}",
+                modifier = Modifier.padding(top = 14.dp),
+            )
+        }
+        Text(
+            text = "Recovery trends",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 24.dp, bottom = 10.dp),
+        )
+        if (trends.items.isEmpty()) {
+            InsightCard(
+                title = "No check-in trend yet",
+                body = "Complete a few daily check-ins and this section will show how energy, stress, and soreness are moving.",
+            )
+        } else {
+            trends.items.forEach { trend ->
+                TrendCard(trend = trend)
+            }
+        }
         if (sessions.isEmpty()) {
             InsightCard(
                 title = "No completed sessions yet",
@@ -984,6 +1011,54 @@ private fun SessionRow(session: BreathworkSession) {
 }
 
 @Composable
+private fun TrendCard(trend: RecoveryTrend) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(trend.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        trend.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    "${trend.latest}/10",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(top = 14.dp),
+            ) {
+                trend.values.forEach { value ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height((14 + value * 5).dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f + value.coerceIn(1, 10) * 0.055f)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BreathRing(
     progress: Float,
     phaseScale: Float,
@@ -1070,6 +1145,25 @@ private data class ProtocolMixItem(
     val count: Int,
 )
 
+private data class RecoveryTrends(
+    val latest: DailyCheckIn?,
+    val items: List<RecoveryTrend>,
+)
+
+private data class RecoveryTrend(
+    val label: String,
+    val latest: Int,
+    val delta: Int,
+    val values: List<Int>,
+) {
+    val message: String
+        get() = when {
+            delta > 0 -> "Up $delta from recent baseline"
+            delta < 0 -> "Down ${kotlin.math.abs(delta)} from recent baseline"
+            else -> "Stable against recent baseline"
+        }
+}
+
 private fun BreathworkProtocol.playbackStateAt(elapsedSeconds: Int): ProtocolPlaybackState {
     val safePhases = phases.ifEmpty {
         BreathworkProtocol.postTrainingRecovery(durationMinutes).phases
@@ -1102,6 +1196,37 @@ private fun BreathworkProtocol.playbackStateAt(elapsedSeconds: Int): ProtocolPla
         phaseRemainingSeconds = 1,
         cycleNumber = cycleNumber.coerceAtMost(cycleCount),
         cycleCount = cycleCount,
+    )
+}
+
+private fun List<DailyCheckIn>.toRecoveryTrends(): RecoveryTrends {
+    val sorted = sortedByDescending { it.createdAt }
+    val latest = sorted.firstOrNull()
+    if (latest == null) {
+        return RecoveryTrends(latest = null, items = emptyList())
+    }
+
+    return RecoveryTrends(
+        latest = latest,
+        items = listOf(
+            buildTrend("Energy", sorted.map { it.energy }),
+            buildTrend("Stress", sorted.map { it.stress }),
+            buildTrend("Soreness", sorted.map { it.soreness }),
+        ),
+    )
+}
+
+private fun buildTrend(label: String, newestFirstValues: List<Int>): RecoveryTrend {
+    val values = newestFirstValues.filter { it > 0 }.take(7)
+    val latest = values.firstOrNull() ?: 0
+    val baselineValues = values.drop(1)
+    val baseline = if (baselineValues.isEmpty()) latest else baselineValues.average().toInt()
+
+    return RecoveryTrend(
+        label = label,
+        latest = latest,
+        delta = latest - baseline,
+        values = values.reversed().ifEmpty { listOf(0) },
     )
 }
 
