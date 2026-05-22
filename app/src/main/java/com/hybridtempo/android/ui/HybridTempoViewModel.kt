@@ -5,10 +5,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hybridtempo.android.data.AthleteProfile
 import com.hybridtempo.android.data.BreathworkRecommendation
-import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
 import com.hybridtempo.android.data.FirebaseHybridTempoRepository
+import com.hybridtempo.android.recommendation.AthleteProfileContext
+import com.hybridtempo.android.recommendation.BackendRecommendationEngine
+import com.hybridtempo.android.recommendation.CheckInContext
+import com.hybridtempo.android.recommendation.RecentTrendContext
+import com.hybridtempo.android.recommendation.RecommendationEngine
+import com.hybridtempo.android.recommendation.RecommendationRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,10 +43,12 @@ data class HybridTempoUiState(
     val hasCompletedOnboarding: Boolean = false,
     val isLoadingProfile: Boolean = true,
     val draft: CheckInDraft = CheckInDraft(),
-    val recommendation: BreathworkRecommendation = buildRecommendation(
-        draft = CheckInDraft(),
-        profile = AthleteProfileDraft(),
-    ),
+    val recommendation: BreathworkRecommendation = BackendRecommendationEngine().recommend(
+        RecommendationRequest(
+            profile = AthleteProfileDraft().toProfileContext(),
+            checkIn = CheckInDraft().toCheckInContext(),
+        ),
+    ).recommendation,
     val recentSessions: List<BreathworkSession> = emptyList(),
     val recentCheckIns: List<DailyCheckIn> = emptyList(),
     val saveMessage: String = "Firebase persistence is ready when app/google-services.json is added.",
@@ -50,6 +57,7 @@ data class HybridTempoUiState(
 
 class HybridTempoViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FirebaseHybridTempoRepository(application.applicationContext)
+    private val recommendationEngine: RecommendationEngine = BackendRecommendationEngine()
     private val _uiState = MutableStateFlow(HybridTempoUiState())
     val uiState: StateFlow<HybridTempoUiState> = _uiState.asStateFlow()
 
@@ -74,7 +82,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                     hasCompletedOnboarding = true,
                     isLoadingProfile = false,
                     draft = checkInDraft,
-                    recommendation = buildRecommendation(checkInDraft, profileDraft),
+                    recommendation = recommendationFor(checkInDraft, profileDraft, current.recentCheckIns),
                     saveMessage = "Profile loaded from Firestore.",
                 )
             }
@@ -100,7 +108,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 it.copy(
                     hasCompletedOnboarding = true,
                     draft = nextDraft,
-                    recommendation = buildRecommendation(nextDraft, profileDraft),
+                    recommendation = recommendationFor(nextDraft, profileDraft, it.recentCheckIns),
                     isSaving = false,
                     saveMessage = result.message,
                 )
@@ -112,7 +120,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update {
             it.copy(
                 draft = draft,
-                recommendation = buildRecommendation(draft, it.profileDraft),
+                recommendation = recommendationFor(draft, it.profileDraft, it.recentCheckIns),
             )
         }
     }
@@ -180,64 +188,26 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val checkIns = runCatching { repository.recentCheckIns() }.getOrDefault(emptyList())
             _uiState.update {
+                val nextCheckIns = if (checkIns.isNotEmpty()) checkIns else listOfNotNull(fallbackCheckIn)
                 it.copy(
-                    recentCheckIns = if (checkIns.isNotEmpty()) checkIns else listOfNotNull(fallbackCheckIn),
+                    recentCheckIns = nextCheckIns,
+                    recommendation = recommendationFor(it.draft, it.profileDraft, nextCheckIns),
                 )
             }
         }
     }
-}
 
-fun buildRecommendation(
-    draft: CheckInDraft,
-    profile: AthleteProfileDraft,
-): BreathworkRecommendation {
-    val highLoad = draft.workoutIntensity >= 7 || draft.soreness >= 7
-    val highStress = draft.stress >= 7
-    val lowEnergy = draft.energy <= 4
-    val wantsSleepSupport = "sleep support" in profile.goals
-
-    return when {
-        wantsSleepSupport && highStress -> BreathworkRecommendation(
-            protocol = "Sleep transition",
-            durationMinutes = draft.timeAvailable,
-            rationale = "Your goals include sleep support and stress is elevated, so this shifts the body toward a calmer night state.",
-            cadence = "4 second inhale · 7 second exhale",
-            breathworkProtocol = BreathworkProtocol.sleepTransition(draft.timeAvailable),
-        )
-
-        highLoad && highStress -> BreathworkRecommendation(
-            protocol = "Downregulation",
-            durationMinutes = draft.timeAvailable,
-            rationale = "High training load plus stress calls for extended exhales and a fast shift out of sympathetic drive.",
-            cadence = "4 second inhale · 6 second exhale",
-            breathworkProtocol = BreathworkProtocol.downregulation(draft.timeAvailable),
-        )
-
-        lowEnergy && draft.workoutType == "Recovery" -> BreathworkRecommendation(
-            protocol = "Recovery reset",
-            durationMinutes = draft.timeAvailable,
-            rationale = "Low energy on a lighter day points to a calm reset instead of more stimulation.",
-            cadence = "4 second inhale · 4 second exhale",
-            breathworkProtocol = BreathworkProtocol.recoveryReset(draft.timeAvailable),
-        )
-
-        draft.workoutIntensity <= 4 && draft.energy >= 7 -> BreathworkRecommendation(
-            protocol = "Activation",
-            durationMinutes = draft.timeAvailable,
-            rationale = "Your recovery cost is low and energy is available, so the session can sharpen focus without overloading you.",
-            cadence = "3 second inhale · 3 second exhale",
-            breathworkProtocol = BreathworkProtocol.activation(draft.timeAvailable),
-        )
-
-        else -> BreathworkRecommendation(
-            protocol = "Post-training recovery",
-            durationMinutes = draft.timeAvailable,
-            rationale = "Your check-in suggests moderate load. This keeps the protocol steady, controlled, and recovery-oriented.",
-            cadence = "4 second inhale · 5 second exhale",
-            breathworkProtocol = BreathworkProtocol.postTrainingRecovery(draft.timeAvailable),
-        )
-    }
+    private fun recommendationFor(
+        draft: CheckInDraft,
+        profile: AthleteProfileDraft,
+        recentCheckIns: List<DailyCheckIn>,
+    ): BreathworkRecommendation = recommendationEngine.recommend(
+        RecommendationRequest(
+            profile = profile.toProfileContext(),
+            checkIn = draft.toCheckInContext(),
+            recentTrends = recentCheckIns.toTrendContext(),
+        ),
+    ).recommendation
 }
 
 private fun CheckInDraft.toDailyCheckIn(): DailyCheckIn = DailyCheckIn(
@@ -247,6 +217,15 @@ private fun CheckInDraft.toDailyCheckIn(): DailyCheckIn = DailyCheckIn(
     timeAvailable = timeAvailable,
     workoutType = workoutType,
     workoutIntensity = workoutIntensity,
+)
+
+private fun CheckInDraft.toCheckInContext(): CheckInContext = CheckInContext(
+    energy = energy,
+    soreness = soreness,
+    stress = stress,
+    workoutType = workoutType,
+    workoutIntensity = workoutIntensity,
+    timeAvailable = timeAvailable,
 )
 
 private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProfile(
@@ -265,4 +244,18 @@ private fun AthleteProfile.toAthleteProfileDraft(): AthleteProfileDraft = Athlet
     weeklyTrainingFrequency = weeklyTrainingFrequency,
     goals = goals,
     preferredSessionLength = preferredSessionLength,
+)
+
+private fun AthleteProfileDraft.toProfileContext(): AthleteProfileContext = AthleteProfileContext(
+    trainingStyle = trainingStyle,
+    weeklyTrainingFrequency = weeklyTrainingFrequency,
+    goals = goals,
+    preferredSessionLength = preferredSessionLength,
+    raceDate = raceDate,
+)
+
+private fun List<DailyCheckIn>.toTrendContext(): RecentTrendContext = RecentTrendContext(
+    energy = map { it.energy }.filter { it > 0 }.take(7),
+    soreness = map { it.soreness }.filter { it > 0 }.take(7),
+    stress = map { it.stress }.filter { it > 0 }.take(7),
 )
