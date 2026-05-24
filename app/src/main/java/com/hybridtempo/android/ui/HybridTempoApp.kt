@@ -33,6 +33,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +45,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,6 +80,7 @@ import com.hybridtempo.android.recommendation.RecommendationQuota
 import com.hybridtempo.android.recommendation.RecommendationSource
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeParseException
 import kotlinx.coroutines.delay
 
@@ -142,12 +147,14 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     AppScreen.OnboardingStep2 -> OnboardingStep2Screen(
                         state = uiState.profileDraft,
                         onStateChange = viewModel::updateProfileDraft,
+                        onBack = { screen = AppScreen.OnboardingStep1 },
                         onNext = { screen = AppScreen.OnboardingStep3 },
                     )
 
                     AppScreen.OnboardingStep3 -> OnboardingStep3Screen(
                         state = uiState.profileDraft,
                         onStateChange = viewModel::updateProfileDraft,
+                        onBack = { screen = AppScreen.OnboardingStep2 },
                         onComplete = {
                             viewModel.saveProfile()
                             screen = AppScreen.Home
@@ -243,34 +250,33 @@ private fun OnboardingStep1Screen(
         return
     }
 
-    ScreenFrame {
-        Eyebrow("Step 1 of 3")
-        Text(
-            text = "Who are you?",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 10.dp, bottom = 22.dp),
-        )
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = { onStateChange(state.copy(name = it)) },
-            label = { Text("Your name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(modifier = Modifier.height(22.dp))
-        Text("Training style", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        ChipRow(
-            options = listOf("Hybrid", "Running", "Strength"),
-            selected = state.trainingStyle,
-            onSelect = { onStateChange(state.copy(trainingStyle = it)) },
-        )
-        FrequencyRow(
-            selected = state.weeklyTrainingFrequency,
-            onSelect = { onStateChange(state.copy(weeklyTrainingFrequency = it)) },
-        )
-        Spacer(modifier = Modifier.height(30.dp))
-        PrimaryAction(text = "Next", onClick = onNext)
+    OnboardingFrame(
+        step = 1,
+        title = "Who are you?",
+        footer = {
+            PrimaryAction(text = "Next", onClick = onNext)
+        },
+    ) {
+        Column {
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = { onStateChange(state.copy(name = it)) },
+                label = { Text("Your name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(28.dp))
+            Text("Training style", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            ChipRow(
+                options = listOf("Hybrid", "Running", "Strength"),
+                selected = state.trainingStyle,
+                onSelect = { onStateChange(state.copy(trainingStyle = it)) },
+            )
+            FrequencyRow(
+                selected = state.weeklyTrainingFrequency,
+                onSelect = { onStateChange(state.copy(weeklyTrainingFrequency = it)) },
+            )
+        }
     }
 }
 
@@ -278,22 +284,21 @@ private fun OnboardingStep1Screen(
 private fun OnboardingStep2Screen(
     state: AthleteProfileDraft,
     onStateChange: (AthleteProfileDraft) -> Unit,
+    onBack: () -> Unit,
     onNext: () -> Unit,
 ) {
-    ScreenFrame {
-        Eyebrow("Step 2 of 3")
-        Text(
-            text = "Your goals",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 10.dp),
-        )
-        Text(
-            text = "Select all that apply.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp, bottom = 18.dp),
-        )
+    OnboardingFrame(
+        step = 2,
+        title = "Your goals",
+        subtitle = "Select all that apply.",
+        footer = {
+            NavigationActions(
+                primaryText = "Next",
+                onPrimary = onNext,
+                onBack = onBack,
+            )
+        },
+    ) {
         GoalGrid(
             selected = state.goals,
             onToggle = { goal ->
@@ -305,8 +310,6 @@ private fun OnboardingStep2Screen(
                 onStateChange(state.copy(goals = nextGoals.ifEmpty { listOf("recovery") }))
             },
         )
-        Spacer(modifier = Modifier.height(30.dp))
-        PrimaryAction(text = "Next", onClick = onNext)
     }
 }
 
@@ -314,37 +317,36 @@ private fun OnboardingStep2Screen(
 private fun OnboardingStep3Screen(
     state: AthleteProfileDraft,
     onStateChange: (AthleteProfileDraft) -> Unit,
+    onBack: () -> Unit,
     onComplete: () -> Unit,
 ) {
-    ScreenFrame {
-        Eyebrow("Step 3 of 3")
-        Text(
-            text = "Preferences",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 10.dp),
-        )
-        DurationRow(
-            selected = state.preferredSessionLength,
-            label = "Preferred session length",
-            onSelect = { onStateChange(state.copy(preferredSessionLength = it)) },
-        )
-        ReminderSettingsCard(
-            state = state,
-            onStateChange = onStateChange,
-        )
-        OutlinedTextField(
-            value = state.raceDate,
-            onValueChange = { onStateChange(state.copy(raceDate = it)) },
-            label = { Text("Race date (optional)") },
-            placeholder = { Text("YYYY-MM-DD") },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-        )
-        Spacer(modifier = Modifier.height(30.dp))
-        PrimaryAction(text = "Get started", onClick = onComplete)
+    OnboardingFrame(
+        step = 3,
+        title = "Preferences",
+        footer = {
+            NavigationActions(
+                primaryText = "Get started",
+                onPrimary = onComplete,
+                onBack = onBack,
+            )
+        },
+    ) {
+        Column {
+            DurationRow(
+                selected = state.preferredSessionLength,
+                label = "Preferred session length",
+                onSelect = { onStateChange(state.copy(preferredSessionLength = it)) },
+            )
+            ReminderSettingsCard(
+                state = state,
+                onStateChange = onStateChange,
+            )
+            RaceDatePickerField(
+                selectedDate = state.raceDate,
+                onDateSelected = { onStateChange(state.copy(raceDate = it)) },
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
     }
 }
 
@@ -794,6 +796,145 @@ private fun ScreenFrame(
         horizontalAlignment = horizontalAlignment,
         content = content,
     )
+}
+
+@Composable
+private fun OnboardingFrame(
+    step: Int,
+    title: String,
+    subtitle: String? = null,
+    footer: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(horizontal = 22.dp, vertical = 24.dp),
+    ) {
+        OnboardingBreadcrumb(currentStep = step)
+        Spacer(modifier = Modifier.height(28.dp))
+        Eyebrow("Step $step of 3")
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        subtitle?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        Spacer(modifier = Modifier.weight(0.7f))
+        Column(content = content)
+        Spacer(modifier = Modifier.weight(1f))
+        footer()
+    }
+}
+
+@Composable
+private fun OnboardingBreadcrumb(currentStep: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        (1..3).forEach { step ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(7.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(
+                        if (step <= currentStep) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NavigationActions(
+    primaryText: String,
+    onPrimary: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = onBack,
+            modifier = Modifier
+                .weight(0.42f)
+                .height(56.dp),
+            shape = RoundedCornerShape(18.dp),
+        ) {
+            Text("Back")
+        }
+        Button(
+            onClick = onPrimary,
+            modifier = Modifier
+                .weight(0.58f)
+                .height(56.dp),
+            shape = RoundedCornerShape(18.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+        ) {
+            Text(primaryText, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RaceDatePickerField(
+    selectedDate: String,
+    onDateSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val selectedMillis = remember(selectedDate) { selectedDate.toEpochMillisOrNull() }
+    val pickerState = rememberDatePickerState(initialSelectedDateMillis = selectedMillis)
+
+    OutlinedButton(
+        onClick = { showPicker = true },
+        modifier = modifier
+            .fillMaxWidth()
+            .height(58.dp),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Text(
+            text = if (selectedDate.isBlank()) {
+                "Choose race date (optional)"
+            } else {
+                "Race date: $selectedDate"
+            },
+        )
+    }
+
+    if (showPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.toLocalDateString()?.let(onDateSelected)
+                        showPicker = false
+                    },
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) {
+                    Text("Cancel")
+                }
+            },
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
 }
 
 @Composable
@@ -1472,6 +1613,21 @@ private fun String.toLocalDateOrNull(): LocalDate? = try {
         null
     }
 }
+
+private fun String.toEpochMillisOrNull(): Long? = try {
+    LocalDate.parse(this)
+        .atStartOfDay()
+        .toInstant(ZoneOffset.UTC)
+        .toEpochMilli()
+} catch (_: DateTimeParseException) {
+    null
+}
+
+private fun Long.toLocalDateString(): String =
+    java.time.Instant.ofEpochMilli(this)
+        .atZone(ZoneOffset.UTC)
+        .toLocalDate()
+        .toString()
 
 private val RecommendationSource.label: String
     get() = when (this) {
