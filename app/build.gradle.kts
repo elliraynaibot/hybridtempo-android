@@ -12,7 +12,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.hybridtempo.android"
+        applicationId = "com.elliraynai.hybridTempo"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

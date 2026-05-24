@@ -69,7 +69,10 @@ type RecommendationRequest = {
 };
 
 export const recommendBreathwork = onCall<RecommendationRequest>(
-  {enforceAppCheck: false},
+  {
+    enforceAppCheck: false,
+    invoker: "public",
+  },
   async (request): Promise<RecommendationResponse> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in before requesting a recommendation.");

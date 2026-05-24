@@ -1,6 +1,7 @@
 package com.hybridtempo.android.recommendation
 
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.hybridtempo.android.data.BreathPhase
@@ -14,12 +15,19 @@ class BackendRecommendationEngine(
         runCatching { FirebaseApp.getInstance() }.getOrNull()
             ?.let { FirebaseFunctions.getInstance("us-central1") }
     },
+    private val authProvider: () -> FirebaseAuth? = {
+        runCatching { FirebaseApp.getInstance() }.getOrNull()
+            ?.let { FirebaseAuth.getInstance() }
+    },
 ) : RecommendationEngine {
     override suspend fun recommend(request: RecommendationRequest): RecommendationResponse {
         val functions = runCatching { functionsProvider() }.getOrNull()
             ?: return fallback.recommend(request)
+        val auth = runCatching { authProvider() }.getOrNull()
+            ?: return fallbackWithNotice("AI backend unavailable because Firebase Auth is not configured.", request)
 
         return try {
+            auth.ensureSignedIn()
             val result = functions
                 .getHttpsCallable("recommendBreathwork")
                 .call(request.toCallableMap())
@@ -42,10 +50,15 @@ class BackendRecommendationEngine(
                         ?: "You have used today's AI recommendations. Use the local protocol for now and check back tomorrow.",
                 )
             } else {
-                fallbackResponse
+                fallbackResponse.copy(notice = "AI backend unavailable. Using the local protocol for this check-in.")
             }
         }
     }
+
+    private suspend fun fallbackWithNotice(
+        notice: String,
+        request: RecommendationRequest,
+    ): RecommendationResponse = fallback.recommend(request).copy(notice = notice)
 }
 
 private fun RecommendationRequest.toCallableMap(): Map<String, Any> = mapOf(
@@ -153,3 +166,8 @@ private fun Any?.asFloat(): Float = when (this) {
 
 private fun Throwable.isDailyLimitError(): Boolean =
     this is FirebaseFunctionsException && code == FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED
+
+private suspend fun FirebaseAuth.ensureSignedIn() {
+    if (currentUser != null) return
+    signInAnonymously().await()
+}
