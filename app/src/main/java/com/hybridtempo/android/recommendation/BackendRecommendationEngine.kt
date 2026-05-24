@@ -50,7 +50,7 @@ class BackendRecommendationEngine(
                         ?: "You have used today's AI recommendations. Use the local protocol for now and check back tomorrow.",
                 )
             } else {
-                fallbackResponse.copy(notice = "AI backend unavailable. Using the local protocol for this check-in.")
+                fallbackResponse.copy(notice = error.toBackendFallbackNotice())
             }
         }
     }
@@ -166,6 +166,16 @@ private fun Any?.asFloat(): Float = when (this) {
 
 private fun Throwable.isDailyLimitError(): Boolean =
     this is FirebaseFunctionsException && code == FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED
+
+private fun Throwable.toBackendFallbackNotice(): String {
+    if (this is FirebaseFunctionsException) {
+        val message = message.orEmpty().ifBlank { "No backend message returned." }
+        return "AI backend unavailable (${code.name.lowercase()}): $message Using the local protocol for this check-in."
+    }
+
+    val message = message.orEmpty().ifBlank { this::class.java.simpleName }
+    return "AI backend unavailable: $message. Using the local protocol for this check-in."
+}
 
 private suspend fun FirebaseAuth.ensureSignedIn() {
     if (currentUser != null) return
