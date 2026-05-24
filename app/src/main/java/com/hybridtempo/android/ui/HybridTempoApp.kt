@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,7 +34,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedAssistChip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -77,23 +80,33 @@ import java.time.format.DateTimeParseException
 import kotlinx.coroutines.delay
 
 private enum class AppScreen {
-    Onboarding,
-    Welcome,
-    Settings,
+    OnboardingStep1,
+    OnboardingStep2,
+    OnboardingStep3,
+    Home,
     CheckIn,
     Recommendation,
     Session,
     History,
 }
 
+private val AppScreen.isOnboarding: Boolean
+    get() = this in setOf(
+        AppScreen.OnboardingStep1,
+        AppScreen.OnboardingStep2,
+        AppScreen.OnboardingStep3,
+    )
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
-    var screen by remember { mutableStateOf(AppScreen.Onboarding) }
+    var screen by remember { mutableStateOf(AppScreen.OnboardingStep1) }
+    var showSettings by remember { mutableStateOf(false) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.hasCompletedOnboarding, uiState.isLoadingProfile) {
-        if (!uiState.isLoadingProfile && uiState.hasCompletedOnboarding && screen == AppScreen.Onboarding) {
-            screen = AppScreen.Welcome
+        if (!uiState.isLoadingProfile && uiState.hasCompletedOnboarding && screen.isOnboarding) {
+            screen = AppScreen.Home
         }
     }
 
@@ -119,36 +132,40 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                 modifier = Modifier.fillMaxSize(),
             ) { target ->
                 when (target) {
-                    AppScreen.Onboarding -> OnboardingScreen(
+                    AppScreen.OnboardingStep1 -> OnboardingStep1Screen(
                         state = uiState.profileDraft,
                         isLoading = uiState.isLoadingProfile,
                         onStateChange = viewModel::updateProfileDraft,
+                        onNext = { screen = AppScreen.OnboardingStep2 },
+                    )
+
+                    AppScreen.OnboardingStep2 -> OnboardingStep2Screen(
+                        state = uiState.profileDraft,
+                        onStateChange = viewModel::updateProfileDraft,
+                        onNext = { screen = AppScreen.OnboardingStep3 },
+                    )
+
+                    AppScreen.OnboardingStep3 -> OnboardingStep3Screen(
+                        state = uiState.profileDraft,
+                        onStateChange = viewModel::updateProfileDraft,
                         onComplete = {
                             viewModel.saveProfile()
-                            screen = AppScreen.Welcome
+                            screen = AppScreen.Home
                         },
                     )
 
-                    AppScreen.Welcome -> WelcomeScreen(
+                    AppScreen.Home -> HomeScreen(
+                        draft = uiState.draft,
+                        recommendation = uiState.recommendation,
+                        latestCheckIn = uiState.recentCheckIns.firstOrNull(),
                         onStart = { screen = AppScreen.CheckIn },
                         onHistory = { screen = AppScreen.History },
-                        onSettings = { screen = AppScreen.Settings },
-                    )
-
-                    AppScreen.Settings -> SettingsScreen(
-                        state = uiState.profileDraft,
-                        saveMessage = uiState.saveMessage,
-                        onStateChange = viewModel::updateProfileDraft,
-                        onSave = {
-                            viewModel.saveProfile()
-                            screen = AppScreen.Welcome
-                        },
-                        onBack = { screen = AppScreen.Welcome },
+                        onSettings = { showSettings = true },
                     )
 
                     AppScreen.CheckIn -> CheckInScreen(
                         state = uiState.draft,
-                        onSettings = { screen = AppScreen.Settings },
+                        onSettings = { showSettings = true },
                         onStateChange = viewModel::updateDraft,
                         onRecommend = {
                             viewModel.requestRecommendationAndSaveCheckIn()
@@ -163,14 +180,14 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         recommendationNotice = uiState.recommendationNotice,
                         isRefreshingRecommendation = uiState.isRefreshingRecommendation,
                         saveMessage = uiState.saveMessage,
-                        onSettings = { screen = AppScreen.Settings },
+                        onSettings = { showSettings = true },
                         onStartSession = { screen = AppScreen.Session },
                         onEdit = { screen = AppScreen.CheckIn },
                     )
 
                     AppScreen.Session -> SessionScreen(
                         recommendation = uiState.recommendation,
-                        onSettings = { screen = AppScreen.Settings },
+                        onSettings = { showSettings = true },
                         onFinish = {
                             viewModel.completeCurrentSession()
                             screen = AppScreen.History
@@ -183,21 +200,33 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         sessions = uiState.recentSessions,
                         checkIns = uiState.recentCheckIns,
                         saveMessage = uiState.saveMessage,
-                        onSettings = { screen = AppScreen.Settings },
+                        onSettings = { showSettings = true },
                         onCheckIn = { screen = AppScreen.CheckIn },
                     )
                 }
+            }
+            if (showSettings) {
+                SettingsSheet(
+                    state = uiState.profileDraft,
+                    saveMessage = uiState.saveMessage,
+                    onStateChange = viewModel::updateProfileDraft,
+                    onDismiss = { showSettings = false },
+                    onSave = {
+                        viewModel.saveProfile()
+                        showSettings = false
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun OnboardingScreen(
+private fun OnboardingStep1Screen(
     state: AthleteProfileDraft,
     isLoading: Boolean,
     onStateChange: (AthleteProfileDraft) -> Unit,
-    onComplete: () -> Unit,
+    onNext: () -> Unit,
 ) {
     if (isLoading) {
         ScreenFrame(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -214,82 +243,95 @@ private fun OnboardingScreen(
         return
     }
 
-    ProfileFormScreen(
-        eyebrow = "Athlete setup",
-        title = "Tune breathwork around your training.",
-        body = "A short profile gives the recommendation engine better defaults without making the app feel heavy.",
-        action = "Save athlete profile",
-        state = state,
-        onStateChange = onStateChange,
-        onAction = onComplete,
-    )
+    ScreenFrame {
+        Eyebrow("Step 1 of 3")
+        Text(
+            text = "Who are you?",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 10.dp, bottom = 22.dp),
+        )
+        OutlinedTextField(
+            value = state.name,
+            onValueChange = { onStateChange(state.copy(name = it)) },
+            label = { Text("Your name") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(22.dp))
+        Text("Training style", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        ChipRow(
+            options = listOf("Hybrid", "Running", "Strength"),
+            selected = state.trainingStyle,
+            onSelect = { onStateChange(state.copy(trainingStyle = it)) },
+        )
+        FrequencyRow(
+            selected = state.weeklyTrainingFrequency,
+            onSelect = { onStateChange(state.copy(weeklyTrainingFrequency = it)) },
+        )
+        Spacer(modifier = Modifier.height(30.dp))
+        PrimaryAction(text = "Next", onClick = onNext)
+    }
 }
 
 @Composable
-private fun SettingsScreen(
+private fun OnboardingStep2Screen(
     state: AthleteProfileDraft,
-    saveMessage: String,
     onStateChange: (AthleteProfileDraft) -> Unit,
-    onSave: () -> Unit,
-    onBack: () -> Unit,
-) {
-    ProfileFormScreen(
-        eyebrow = "Profile settings",
-        title = "Edit your athlete defaults.",
-        body = "These values shape future recommendations and are saved as your reusable training profile.",
-        action = "Save changes",
-        state = state,
-        footer = {
-            InsightCard(
-                title = "Sync status",
-                body = saveMessage,
-                modifier = Modifier.padding(top = 16.dp),
-            )
-            OutlinedButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-            ) {
-                Text("Back")
-            }
-        },
-        onStateChange = onStateChange,
-        onAction = onSave,
-    )
-}
-
-@Composable
-private fun ProfileFormScreen(
-    eyebrow: String,
-    title: String,
-    body: String,
-    action: String,
-    state: AthleteProfileDraft,
-    footer: @Composable ColumnScope.() -> Unit = {},
-    onStateChange: (AthleteProfileDraft) -> Unit,
-    onAction: () -> Unit,
+    onNext: () -> Unit,
 ) {
     ScreenFrame {
-        Eyebrow(eyebrow)
+        Eyebrow("Step 2 of 3")
         Text(
-            text = title,
+            text = "Your goals",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 10.dp),
         )
         Text(
-            text = body,
+            text = "Select all that apply.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+            modifier = Modifier.padding(top = 8.dp, bottom = 18.dp),
         )
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = { onStateChange(state.copy(name = it)) },
-            label = { Text("Name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+        GoalGrid(
+            selected = state.goals,
+            onToggle = { goal ->
+                val nextGoals = if (goal in state.goals) {
+                    state.goals - goal
+                } else {
+                    state.goals + goal
+                }
+                onStateChange(state.copy(goals = nextGoals.ifEmpty { listOf("recovery") }))
+            },
+        )
+        Spacer(modifier = Modifier.height(30.dp))
+        PrimaryAction(text = "Next", onClick = onNext)
+    }
+}
+
+@Composable
+private fun OnboardingStep3Screen(
+    state: AthleteProfileDraft,
+    onStateChange: (AthleteProfileDraft) -> Unit,
+    onComplete: () -> Unit,
+) {
+    ScreenFrame {
+        Eyebrow("Step 3 of 3")
+        Text(
+            text = "Preferences",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        DurationRow(
+            selected = state.preferredSessionLength,
+            label = "Preferred session length",
+            onSelect = { onStateChange(state.copy(preferredSessionLength = it)) },
+        )
+        ReminderSettingsCard(
+            state = state,
+            onStateChange = onStateChange,
         )
         OutlinedTextField(
             value = state.raceDate,
@@ -301,74 +343,143 @@ private fun ProfileFormScreen(
                 .fillMaxWidth()
                 .padding(top = 12.dp),
         )
-        Spacer(modifier = Modifier.height(22.dp))
-        Text("Training style", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        ChipRow(
-            options = listOf("Hybrid", "Running", "Strength", "Functional fitness", "Recovery focused"),
-            selected = state.trainingStyle,
-            onSelect = { onStateChange(state.copy(trainingStyle = it)) },
-        )
-        FrequencyRow(
-            selected = state.weeklyTrainingFrequency,
-            onSelect = { onStateChange(state.copy(weeklyTrainingFrequency = it)) },
-        )
-        DurationRow(
-            selected = state.preferredSessionLength,
-            label = "Preferred session length",
-            onSelect = { onStateChange(state.copy(preferredSessionLength = it)) },
-        )
-        GoalSelector(
-            selected = state.goals,
-            onToggle = { goal ->
-                val nextGoals = if (goal in state.goals) {
-                    state.goals - goal
-                } else {
-                    state.goals + goal
-                }
-                onStateChange(state.copy(goals = nextGoals.ifEmpty { listOf("recovery") }))
-            },
-        )
-        ReminderSettingsCard(
-            state = state,
-            onStateChange = onStateChange,
-        )
         Spacer(modifier = Modifier.height(30.dp))
-        PrimaryAction(text = action, onClick = onAction)
-        footer()
+        PrimaryAction(text = "Get started", onClick = onComplete)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsSheet(
+    state: AthleteProfileDraft,
+    saveMessage: String,
+    onStateChange: (AthleteProfileDraft) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 10.dp),
+        ) {
+            Eyebrow("Profile settings")
+            Text(
+                text = "Edit your athlete defaults.",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp, bottom = 18.dp),
+            )
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = { onStateChange(state.copy(name = it)) },
+                label = { Text("Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.raceDate,
+                onValueChange = { onStateChange(state.copy(raceDate = it)) },
+                label = { Text("Race date") },
+                placeholder = { Text("YYYY-MM-DD") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            )
+            Text(
+                text = "Training style",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 18.dp),
+            )
+            ChipRow(
+                options = listOf("Hybrid", "Running", "Strength", "Functional fitness", "Recovery focused"),
+                selected = state.trainingStyle,
+                onSelect = { onStateChange(state.copy(trainingStyle = it)) },
+            )
+            FrequencyRow(
+                selected = state.weeklyTrainingFrequency,
+                onSelect = { onStateChange(state.copy(weeklyTrainingFrequency = it)) },
+            )
+            DurationRow(
+                selected = state.preferredSessionLength,
+                label = "Preferred session length",
+                onSelect = { onStateChange(state.copy(preferredSessionLength = it)) },
+            )
+            InsightCard(
+                title = "Sync status",
+                body = saveMessage,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            PrimaryAction(text = "Save changes", onClick = onSave)
+            Spacer(modifier = Modifier.height(22.dp))
+        }
     }
 }
 
 @Composable
-private fun WelcomeScreen(
+private fun HomeScreen(
+    draft: CheckInDraft,
+    recommendation: BreathworkRecommendation,
+    latestCheckIn: DailyCheckIn?,
     onStart: () -> Unit,
     onHistory: () -> Unit,
     onSettings: () -> Unit,
 ) {
     ScreenFrame {
-        Spacer(modifier = Modifier.height(28.dp))
-        BrandMark()
-        Spacer(modifier = Modifier.height(32.dp))
-        Text(
-            text = "HybridTempo",
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Black,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column {
+                Text(
+                    text = "HybridTempo",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    text = "Breathwork designed around how you train.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            OutlinedButton(onClick = onSettings) {
+                Text("Settings")
+            }
+        }
+        Spacer(modifier = Modifier.height(26.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BrandMark()
+            Spacer(modifier = Modifier.width(18.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Ready to recover?",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = latestCheckIn?.let {
+                        "Latest check-in: Energy ${it.energy} · Stress ${it.stress} · Soreness ${it.soreness}"
+                    } ?: "No session today yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+        InsightCard(
+            title = "Today's check-in",
+            body = latestCheckIn?.let {
+                "${it.workoutType} · Energy ${it.energy}/10 · Stress ${it.stress}/10 · Soreness ${it.soreness}/10"
+            } ?: "Preview: ${draft.workoutType} · Energy ${draft.energy}/10 · Stress ${draft.stress}/10 · Soreness ${draft.soreness}/10 → ${recommendation.protocol}",
+            modifier = Modifier.padding(top = 28.dp),
         )
-        Text(
-            text = "Breathwork designed around how you train.",
-            style = MaterialTheme.typography.headlineMedium,
-            lineHeight = 34.sp,
-            modifier = Modifier.padding(top = 16.dp),
-        )
-        Text(
-            text = "Check in, match your recovery state, and start a short protocol built for the training you actually did.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 18.dp),
-        )
-        Spacer(modifier = Modifier.height(32.dp))
-        MetricStrip()
-        Spacer(modifier = Modifier.height(36.dp))
-        PrimaryAction(text = "Start daily check-in", onClick = onStart)
+        Spacer(modifier = Modifier.height(30.dp))
+        PrimaryAction(text = "Start check-in", onClick = onStart)
         OutlinedButton(
             onClick = onHistory,
             modifier = Modifier
@@ -376,14 +487,6 @@ private fun WelcomeScreen(
                 .padding(top = 12.dp),
         ) {
             Text("View history")
-        }
-        OutlinedButton(
-            onClick = onSettings,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-        ) {
-            Text("Profile settings")
         }
     }
 }
@@ -396,19 +499,17 @@ private fun CheckInScreen(
     onRecommend: () -> Unit,
 ) {
     ScreenFrame {
-        Eyebrow("Daily check-in")
-        Text(
-            text = "What state are you bringing into recovery?",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 10.dp, bottom = 22.dp),
+        ScreenHeader(
+            eyebrow = "Daily check-in",
+            title = "How are you feeling?",
+            onSettings = onSettings,
         )
         ScoreSlider("Energy", state.energy) { onStateChange(state.copy(energy = it)) }
-        ScoreSlider("Soreness", state.soreness) { onStateChange(state.copy(soreness = it)) }
         ScoreSlider("Stress", state.stress) { onStateChange(state.copy(stress = it)) }
+        ScoreSlider("Soreness", state.soreness) { onStateChange(state.copy(soreness = it)) }
         Spacer(modifier = Modifier.height(18.dp))
         Text(
-            text = "Training context",
+            text = "Workout context",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -417,23 +518,12 @@ private fun CheckInScreen(
             selected = state.workoutType,
             onSelect = { onStateChange(state.copy(workoutType = it)) },
         )
-        ScoreSlider("Workout intensity", state.workoutIntensity) {
-            onStateChange(state.copy(workoutIntensity = it))
-        }
         DurationRow(
             selected = state.timeAvailable,
             onSelect = { onStateChange(state.copy(timeAvailable = it)) },
         )
         Spacer(modifier = Modifier.height(30.dp))
         PrimaryAction(text = "Get recommendation", onClick = onRecommend)
-        OutlinedButton(
-            onClick = onSettings,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-        ) {
-            Text("Profile settings")
-        }
     }
 }
 
@@ -450,15 +540,13 @@ private fun RecommendationScreen(
     onEdit: () -> Unit,
 ) {
     ScreenFrame {
-        Eyebrow("Recommended protocol")
-        Text(
-            text = recommendation.protocol,
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Black,
-            modifier = Modifier.padding(top = 12.dp),
+        ScreenHeader(
+            eyebrow = "Your protocol",
+            title = recommendation.protocol,
+            onSettings = onSettings,
         )
         Text(
-            text = "${recommendation.durationMinutes} minutes",
+            text = "${recommendation.durationMinutes} min · ${recommendation.cadence}",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(top = 10.dp),
@@ -491,11 +579,6 @@ private fun RecommendationScreen(
                 modifier = Modifier.padding(top = 14.dp),
             )
         }
-        InsightCard(
-            title = "Persistence",
-            body = saveMessage,
-            modifier = Modifier.padding(top = 14.dp),
-        )
         Spacer(modifier = Modifier.height(36.dp))
         PrimaryAction(text = "Start session", onClick = onStartSession)
         OutlinedButton(
@@ -505,14 +588,6 @@ private fun RecommendationScreen(
                 .padding(top = 12.dp),
         ) {
             Text("Adjust check-in")
-        }
-        OutlinedButton(
-            onClick = onSettings,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-        ) {
-            Text("Profile settings")
         }
     }
 }
@@ -671,49 +746,24 @@ private fun HistoryScreen(
     onCheckIn: () -> Unit,
 ) {
     val summary = remember(sessions) { sessions.toHistorySummary() }
-    val trends = remember(checkIns) { checkIns.toRecoveryTrends() }
 
     ScreenFrame {
-        Eyebrow("History")
-        Text(
-            text = "Recovery consistency, not noise.",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+        ScreenHeader(
+            eyebrow = "History",
+            title = "Recovery consistency",
+            onSettings = onSettings,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             MetricCard(summary.currentStreak.toString(), "day streak", Modifier.weight(1f))
             MetricCard(summary.totalSessions.toString(), "sessions", Modifier.weight(1f))
             MetricCard(summary.totalMinutes.toString(), "minutes", Modifier.weight(1f))
         }
-        InsightCard(
-            title = "Recommended now",
-            body = "${recommendation.protocol} · ${recommendation.durationMinutes} min · ${recommendation.cadence} · ${recommendationSource.label}",
-            modifier = Modifier.padding(top = 18.dp),
-        )
-        trends.latest?.let { latest ->
-            InsightCard(
-                title = "Today's state",
-                body = "Energy ${latest.energy}/10 · Stress ${latest.stress}/10 · Soreness ${latest.soreness}/10 · ${latest.workoutType}",
-                modifier = Modifier.padding(top = 14.dp),
-            )
-        }
         Text(
-            text = "Recovery trends",
+            text = "Recent sessions",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 24.dp, bottom = 10.dp),
+            modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
         )
-        if (trends.items.isEmpty()) {
-            InsightCard(
-                title = "No check-in trend yet",
-                body = "Complete a few daily check-ins and this section will show how energy, stress, and soreness are moving.",
-            )
-        } else {
-            trends.items.forEach { trend ->
-                TrendCard(trend = trend)
-            }
-        }
         if (sessions.isEmpty()) {
             InsightCard(
                 title = "No completed sessions yet",
@@ -721,40 +771,12 @@ private fun HistoryScreen(
                 modifier = Modifier.padding(top = 18.dp),
             )
         } else {
-            Text(
-                text = "Protocol mix",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 24.dp, bottom = 10.dp),
-            )
-            summary.protocolMix.forEach { item ->
-                ProgressRow(label = item.protocol, count = item.count, total = summary.totalSessions)
-            }
-            Text(
-                text = "Recent sessions",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
-            )
             sessions.take(6).forEach { session ->
                 SessionRow(session = session)
             }
         }
-        InsightCard(
-            title = "Sync status",
-            body = saveMessage,
-            modifier = Modifier.padding(top = 18.dp),
-        )
         Spacer(modifier = Modifier.height(36.dp))
         PrimaryAction(text = "New check-in", onClick = onCheckIn)
-        OutlinedButton(
-            onClick = onSettings,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-        ) {
-            Text("Profile settings")
-        }
     }
 }
 
@@ -819,6 +841,34 @@ private fun MetricCard(value: String, label: String, modifier: Modifier = Modifi
 }
 
 @Composable
+private fun ScreenHeader(
+    eyebrow: String,
+    title: String,
+    onSettings: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 22.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Eyebrow(eyebrow)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        OutlinedButton(onClick = onSettings) {
+            Text("Settings")
+        }
+    }
+}
+
+@Composable
 private fun ScoreSlider(label: String, value: Int, onValueChange: (Int) -> Unit) {
     Column(modifier = Modifier.padding(bottom = 12.dp)) {
         Row(
@@ -835,6 +885,41 @@ private fun ScoreSlider(label: String, value: Int, onValueChange: (Int) -> Unit)
             valueRange = 1f..10f,
             steps = 8,
         )
+    }
+}
+
+private data class GoalOption(
+    val label: String,
+    val value: String,
+)
+
+@Composable
+private fun GoalGrid(
+    selected: List<String>,
+    onToggle: (String) -> Unit,
+) {
+    val goals = listOf(
+        GoalOption("Recovery", "recovery"),
+        GoalOption("Activation", "activation"),
+        GoalOption("Focus", "focus"),
+        GoalOption("Race prep", "race prep"),
+        GoalOption("Sleep", "sleep support"),
+        GoalOption("Stress", "stress"),
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        goals.chunked(2).forEach { rowGoals ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rowGoals.forEach { goal ->
+                    SelectButton(
+                        text = goal.label,
+                        selected = goal.value in selected,
+                        onClick = { onToggle(goal.value) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
     }
 }
 
