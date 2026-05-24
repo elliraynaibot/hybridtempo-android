@@ -13,6 +13,7 @@ data class AthleteProfileContext(
     val weeklyTrainingFrequency: Int,
     val goals: List<String>,
     val preferredSessionLength: Int,
+    val raceName: String,
     val raceDate: String,
 )
 

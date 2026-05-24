@@ -5,6 +5,7 @@ import java.time.LocalDate
 
 data class AthleteProfile(
     val name: String = "",
+    val raceName: String = "",
     val raceDate: String = "",
     val trainingStyle: String = "hybrid",
     val weeklyTrainingFrequency: Int = 5,

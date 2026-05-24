@@ -11,6 +11,7 @@ HybridTempo should not call an AI model directly from the Android app. The app s
     "weeklyTrainingFrequency": 5,
     "goals": ["recovery", "race prep"],
     "preferredSessionLength": 5,
+    "raceName": "HYROX Toronto",
     "raceDate": "2026-10-01"
   },
   "checkIn": {

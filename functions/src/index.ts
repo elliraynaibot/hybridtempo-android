@@ -51,6 +51,7 @@ type RecommendationRequest = {
     weeklyTrainingFrequency: number;
     goals: string[];
     preferredSessionLength: number;
+    raceName: string;
     raceDate: string;
   };
   checkIn: {
@@ -155,6 +156,7 @@ function validateRecommendationRequest(data: unknown): RecommendationRequest {
       weeklyTrainingFrequency: readRange(profile.weeklyTrainingFrequency, "profile.weeklyTrainingFrequency", 1, 14),
       goals: readStringArray(profile.goals, "profile.goals"),
       preferredSessionLength: readDuration(profile.preferredSessionLength, "profile.preferredSessionLength"),
+      raceName: readOptionalString(profile.raceName),
       raceDate: readOptionalString(profile.raceDate),
     },
     checkIn: {

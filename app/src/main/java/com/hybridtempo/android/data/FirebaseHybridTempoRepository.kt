@@ -26,6 +26,7 @@ class FirebaseHybridTempoRepository(
 
         return AthleteProfile(
             name = document.getString("name").orEmpty(),
+            raceName = document.getString("raceName").orEmpty(),
             raceDate = document.getString("raceDate").orEmpty(),
             trainingStyle = document.getString("trainingStyle") ?: "Hybrid",
             weeklyTrainingFrequency = document.getLong("weeklyTrainingFrequency")?.toInt() ?: 5,
@@ -158,6 +159,7 @@ class FirebaseUnavailableException(message: String) : IllegalStateException(mess
 
 private fun AthleteProfile.toFirestoreMap(): Map<String, Any> = mapOf(
     "name" to name,
+    "raceName" to raceName,
     "raceDate" to raceDate,
     "trainingStyle" to trainingStyle,
     "weeklyTrainingFrequency" to weeklyTrainingFrequency,

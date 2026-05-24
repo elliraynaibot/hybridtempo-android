@@ -341,6 +341,16 @@ private fun OnboardingStep3Screen(
                 state = state,
                 onStateChange = onStateChange,
             )
+            OutlinedTextField(
+                value = state.raceName,
+                onValueChange = { onStateChange(state.copy(raceName = it)) },
+                label = { Text("Race name (optional)") },
+                placeholder = { Text("HYROX Toronto") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            )
             RaceDatePickerField(
                 selectedDate = state.raceDate,
                 onDateSelected = { onStateChange(state.copy(raceDate = it)) },
@@ -384,6 +394,16 @@ private fun SettingsSheet(
                 onValueChange = { onStateChange(state.copy(raceDate = it)) },
                 label = { Text("Race date") },
                 placeholder = { Text("YYYY-MM-DD") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            )
+            OutlinedTextField(
+                value = state.raceName,
+                onValueChange = { onStateChange(state.copy(raceName = it)) },
+                label = { Text("Race name") },
+                placeholder = { Text("HYROX Toronto") },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()

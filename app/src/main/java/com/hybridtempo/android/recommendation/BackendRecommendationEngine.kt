@@ -67,6 +67,7 @@ private fun RecommendationRequest.toCallableMap(): Map<String, Any> = mapOf(
         "weeklyTrainingFrequency" to profile.weeklyTrainingFrequency,
         "goals" to profile.goals,
         "preferredSessionLength" to profile.preferredSessionLength,
+        "raceName" to profile.raceName,
         "raceDate" to profile.raceDate,
     ),
     "checkIn" to mapOf(

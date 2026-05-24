@@ -35,6 +35,7 @@ data class CheckInDraft(
 
 data class AthleteProfileDraft(
     val name: String = "",
+    val raceName: String = "",
     val raceDate: String = "",
     val trainingStyle: String = "Hybrid",
     val weeklyTrainingFrequency: Int = 5,
@@ -278,6 +279,7 @@ private fun CheckInDraft.toCheckInContext(): CheckInContext = CheckInContext(
 
 private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProfile(
     name = name,
+    raceName = raceName,
     raceDate = raceDate,
     trainingStyle = trainingStyle,
     weeklyTrainingFrequency = weeklyTrainingFrequency,
@@ -290,6 +292,7 @@ private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProf
 
 private fun AthleteProfile.toAthleteProfileDraft(): AthleteProfileDraft = AthleteProfileDraft(
     name = name,
+    raceName = raceName,
     raceDate = raceDate,
     trainingStyle = trainingStyle,
     weeklyTrainingFrequency = weeklyTrainingFrequency,
@@ -305,6 +308,7 @@ private fun AthleteProfileDraft.toProfileContext(): AthleteProfileContext = Athl
     weeklyTrainingFrequency = weeklyTrainingFrequency,
     goals = goals,
     preferredSessionLength = preferredSessionLength,
+    raceName = raceName,
     raceDate = raceDate,
 )
 
