@@ -13,6 +13,10 @@ data class ReadinessScore(
     val summary: String,
     val nudge: String,
     val sourceLabel: String = "Manual inputs",
+    val confidenceLabel: String = "Low",
+    val basedOn: List<String> = emptyList(),
+    val missingSignals: List<String> = emptyList(),
+    val nextAction: String = "Complete today's check-in to calibrate readiness.",
 )
 
 data class HealthMetricsSnapshot(
@@ -50,12 +54,20 @@ object ReadinessCalculator {
                 label = "Needs check-in",
                 summary = "Readiness will update after your first daily check-in.",
                 nudge = "Complete a check-in so HybridTempo can calibrate today's recovery signal.",
+                confidenceLabel = "Low",
+                basedOn = recentSessions.toBreathworkSignal(),
+                missingSignals = healthMetrics.toMissingSignals(hasCheckIn = false),
+                nextAction = "Complete today's check-in to replace the baseline with your current energy, stress, soreness, and workout context.",
             )
         }
 
         val consistencyBonus = recentSessions
             .count { it.completed && it.completedAt.toLocalDateOrNull()?.let { date -> date >= today.minusDays(6) } == true }
             .coerceAtMost(6)
+        val basedOn = listOf(
+            "Today's manual check-in: energy ${latestCheckIn.energy}/10, stress ${latestCheckIn.stress}/10, soreness ${latestCheckIn.soreness}/10",
+        ) + recentSessions.toBreathworkSignal() + healthMetrics.toHealthSignals()
+        val missingSignals = healthMetrics.toMissingSignals(hasCheckIn = true)
 
         val rawScore = 50 +
             ((latestCheckIn.energy - 5) * 5) +
@@ -71,7 +83,76 @@ object ReadinessCalculator {
             summary = latestCheckIn.toReadinessSummary(healthMetrics),
             nudge = buildNudge(score, consistencyBonus),
             sourceLabel = if (healthMetrics?.hasData == true) "Manual + Health Connect" else "Manual inputs",
+            confidenceLabel = confidenceLabel(hasCheckIn = true, healthMetrics = healthMetrics),
+            basedOn = basedOn,
+            missingSignals = missingSignals,
+            nextAction = buildNextAction(score, consistencyBonus, missingSignals),
         )
+    }
+
+    private fun List<BreathworkSession>.toBreathworkSignal(): List<String> {
+        val completedCount = count { it.completed }
+        return if (completedCount > 0) {
+            listOf("$completedCount breathwork sessions in your recent history")
+        } else {
+            emptyList()
+        }
+    }
+
+    private fun HealthMetricsSnapshot?.toHealthSignals(): List<String> {
+        if (this?.hasData != true) return emptyList()
+
+        return listOfNotNull(
+            sleepMinutesLastNight?.let { "Health Connect sleep: ${it / 60}h ${it % 60}m last night" },
+            workoutsLast7Days?.let { "Health Connect workouts: $it sessions in 7 days" },
+            restingHeartRateBpm?.let { "Health Connect resting HR: $it bpm" },
+        )
+    }
+
+    private fun HealthMetricsSnapshot?.toMissingSignals(hasCheckIn: Boolean): List<String> {
+        val missing = mutableListOf<String>()
+        if (!hasCheckIn) {
+            missing += "Manual check-in today"
+        }
+        if (this?.sleepMinutesLastNight == null) {
+            missing += "Recent sleep data from Health Connect"
+        }
+        if (this?.workoutsLast7Days == null) {
+            missing += "Recent workout data from Health Connect"
+        }
+        if (this?.restingHeartRateBpm == null) {
+            missing += "Recent resting HR from Health Connect"
+        }
+        return missing
+    }
+
+    private fun confidenceLabel(
+        hasCheckIn: Boolean,
+        healthMetrics: HealthMetricsSnapshot?,
+    ): String {
+        if (!hasCheckIn) return "Low"
+        val healthSignalCount = listOf(
+            healthMetrics?.sleepMinutesLastNight,
+            healthMetrics?.workoutsLast7Days,
+            healthMetrics?.restingHeartRateBpm,
+        ).count { it != null }
+
+        return when {
+            healthSignalCount >= 2 -> "High"
+            healthSignalCount == 1 -> "Medium"
+            else -> "Medium"
+        }
+    }
+
+    private fun buildNextAction(
+        score: Int,
+        consistencyBonus: Int,
+        missingSignals: List<String>,
+    ): String = when {
+        missingSignals.any { it.contains("sleep", ignoreCase = true) } -> "Complete today's check-in and keep Health Connect connected so sleep data can improve the estimate."
+        score < 60 -> "Choose a downregulation session today and protect sleep tonight."
+        consistencyBonus < 3 -> "Complete a short recovery session to build a stronger weekly regulation habit."
+        else -> "Keep the current recovery rhythm and check in again tomorrow."
     }
 
     private fun DailyCheckIn.toReadinessSummary(healthMetrics: HealthMetricsSnapshot?): String {

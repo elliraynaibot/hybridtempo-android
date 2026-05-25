@@ -31,6 +31,10 @@ class ReadinessCalculatorTest {
 
         assertEquals(79, readiness.score)
         assertEquals("Ready", readiness.label)
+        assertEquals("Medium", readiness.confidenceLabel)
+        assertTrue(readiness.basedOn.any { it.contains("manual check-in") })
+        assertTrue(readiness.basedOn.any { it.contains("3 breathwork") })
+        assertTrue(readiness.missingSignals.any { it.contains("Health Connect") })
         assertTrue(readiness.summary.contains("Energy is supporting readiness"))
         assertTrue(readiness.nudge.contains("Keep the rhythm"))
     }
@@ -55,6 +59,9 @@ class ReadinessCalculatorTest {
         )
 
         assertEquals("Manual + Health Connect", readiness.sourceLabel)
+        assertEquals("High", readiness.confidenceLabel)
+        assertTrue(readiness.basedOn.any { it.contains("sleep") })
+        assertTrue(readiness.basedOn.any { it.contains("resting HR") })
         assertTrue(readiness.summary.contains("sleep data supports recovery"))
     }
 
@@ -68,6 +75,9 @@ class ReadinessCalculatorTest {
 
         assertEquals(50, readiness.score)
         assertEquals("Needs check-in", readiness.label)
+        assertEquals("Low", readiness.confidenceLabel)
+        assertTrue(readiness.missingSignals.any { it.contains("Manual check-in") })
+        assertTrue(readiness.nextAction.contains("Complete today's check-in"))
         assertTrue(readiness.nudge.contains("Complete a check-in"))
     }
 

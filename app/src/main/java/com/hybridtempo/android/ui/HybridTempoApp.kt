@@ -699,7 +699,7 @@ private fun ReadinessCard(
                         modifier = Modifier.padding(top = 4.dp),
                     )
                     Text(
-                        text = readiness.sourceLabel,
+                        text = "${readiness.sourceLabel} · ${readiness.confidenceLabel} confidence",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.64f),
                         modifier = Modifier.padding(top = 6.dp),
@@ -723,6 +723,67 @@ private fun ReadinessCard(
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f),
                 modifier = Modifier.padding(top = 8.dp),
             )
+            ReadinessSignalSection(
+                title = "Based on",
+                items = readiness.basedOn,
+                emptyText = "Baseline only. Complete a check-in to add useful signal.",
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            if (readiness.missingSignals.isNotEmpty()) {
+                ReadinessSignalSection(
+                    title = "Missing",
+                    items = readiness.missingSignals.take(3),
+                    emptyText = "",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+            Text(
+                text = "Next action",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            Text(
+                text = readiness.nextAction,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadinessSignalSection(
+    title: String,
+    items: List<String>,
+    emptyText: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        if (items.isEmpty()) {
+            Text(
+                text = emptyText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        } else {
+            items.take(4).forEach { item ->
+                Text(
+                    text = "- $item",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         }
     }
 }
