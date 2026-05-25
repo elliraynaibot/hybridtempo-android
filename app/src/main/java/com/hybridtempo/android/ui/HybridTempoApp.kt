@@ -1093,9 +1093,13 @@ private fun OnboardingFrame(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
-        Spacer(modifier = Modifier.weight(0.7f))
-        Column(content = content)
-        Spacer(modifier = Modifier.weight(1f))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 22.dp, bottom = 18.dp)
+                .verticalScroll(rememberScrollState()),
+            content = content,
+        )
         footer()
     }
 }
