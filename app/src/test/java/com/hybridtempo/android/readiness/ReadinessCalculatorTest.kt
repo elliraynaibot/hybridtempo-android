@@ -36,6 +36,29 @@ class ReadinessCalculatorTest {
     }
 
     @Test
+    fun `labels readiness as manual plus health connect when health data is available`() {
+        val today = LocalDate.of(2026, 5, 25)
+        val readiness = ReadinessCalculator.calculate(
+            latestCheckIn = DailyCheckIn(
+                energy = 6,
+                stress = 5,
+                soreness = 5,
+                createdAt = "${today}T10:00:00Z",
+            ),
+            recentSessions = emptyList(),
+            healthMetrics = HealthMetricsSnapshot(
+                sleepMinutesLastNight = 470,
+                workoutsLast7Days = 4,
+                restingHeartRateBpm = 52,
+            ),
+            today = today,
+        )
+
+        assertEquals("Manual + Health Connect", readiness.sourceLabel)
+        assertTrue(readiness.summary.contains("sleep data supports recovery"))
+    }
+
+    @Test
     fun `returns setup state when no check-in exists`() {
         val readiness = ReadinessCalculator.calculate(
             latestCheckIn = null,

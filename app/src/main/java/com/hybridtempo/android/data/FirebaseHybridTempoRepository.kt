@@ -35,6 +35,7 @@ class FirebaseHybridTempoRepository(
             eveningReminderEnabled = document.getBoolean("eveningReminderEnabled") ?: false,
             eveningReminderHour = document.getLong("eveningReminderHour")?.toInt() ?: 20,
             eveningReminderMinute = document.getLong("eveningReminderMinute")?.toInt() ?: 30,
+            healthConnectEnabled = document.getBoolean("healthConnectEnabled") ?: false,
         )
     }
 
@@ -168,6 +169,7 @@ private fun AthleteProfile.toFirestoreMap(): Map<String, Any> = mapOf(
     "eveningReminderEnabled" to eveningReminderEnabled,
     "eveningReminderHour" to eveningReminderHour,
     "eveningReminderMinute" to eveningReminderMinute,
+    "healthConnectEnabled" to healthConnectEnabled,
 )
 
 private fun DailyCheckIn.toFirestoreMap(): Map<String, Any> = mapOf(

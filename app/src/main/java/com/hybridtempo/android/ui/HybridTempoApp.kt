@@ -76,6 +76,9 @@ import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
+import com.hybridtempo.android.health.HealthConnectAvailability
+import com.hybridtempo.android.health.HealthConnectManager
+import com.hybridtempo.android.health.HealthConnectUiStatus
 import com.hybridtempo.android.readiness.RaceCountdown
 import com.hybridtempo.android.readiness.RaceCountdownCalculator
 import com.hybridtempo.android.readiness.ReadinessCalculator
@@ -112,6 +115,11 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
     var screen by remember { mutableStateOf(AppScreen.OnboardingStep1) }
     var showSettings by remember { mutableStateOf(false) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val healthConnectLauncher = rememberLauncherForActivityResult(
+        contract = HealthConnectManager.permissionsContract(),
+    ) { grantedPermissions ->
+        viewModel.onHealthConnectPermissionsResult(grantedPermissions)
+    }
 
     LaunchedEffect(uiState.hasCompletedOnboarding, uiState.isLoadingProfile) {
         if (!uiState.isLoadingProfile && uiState.hasCompletedOnboarding && screen.isOnboarding) {
@@ -157,7 +165,9 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
 
                     AppScreen.OnboardingStep3 -> OnboardingStep3Screen(
                         state = uiState.profileDraft,
+                        healthConnectStatus = uiState.healthConnectStatus,
                         onStateChange = viewModel::updateProfileDraft,
+                        onConnectHealth = { healthConnectLauncher.launch(HealthConnectManager.PERMISSIONS) },
                         onBack = { screen = AppScreen.OnboardingStep2 },
                         onComplete = {
                             viewModel.saveProfile()
@@ -171,6 +181,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         recommendation = uiState.recommendation,
                         latestCheckIn = uiState.recentCheckIns.firstOrNull(),
                         recentSessions = uiState.recentSessions,
+                        healthConnectStatus = uiState.healthConnectStatus,
                         onStart = { screen = AppScreen.CheckIn },
                         onHistory = { screen = AppScreen.History },
                         onSettings = { showSettings = true },
@@ -221,8 +232,10 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
             if (showSettings) {
                 SettingsSheet(
                     state = uiState.profileDraft,
+                    healthConnectStatus = uiState.healthConnectStatus,
                     saveMessage = uiState.saveMessage,
                     onStateChange = viewModel::updateProfileDraft,
+                    onConnectHealth = { healthConnectLauncher.launch(HealthConnectManager.PERMISSIONS) },
                     onDismiss = { showSettings = false },
                     onSave = {
                         viewModel.saveProfile()
@@ -322,7 +335,9 @@ private fun OnboardingStep2Screen(
 @Composable
 private fun OnboardingStep3Screen(
     state: AthleteProfileDraft,
+    healthConnectStatus: HealthConnectUiStatus,
     onStateChange: (AthleteProfileDraft) -> Unit,
+    onConnectHealth: () -> Unit,
     onBack: () -> Unit,
     onComplete: () -> Unit,
 ) {
@@ -347,6 +362,13 @@ private fun OnboardingStep3Screen(
                 state = state,
                 onStateChange = onStateChange,
             )
+            HealthConnectCard(
+                status = healthConnectStatus,
+                enabled = state.healthConnectEnabled,
+                onConnect = onConnectHealth,
+                onSkip = { onStateChange(state.copy(healthConnectEnabled = false)) },
+                modifier = Modifier.padding(top = 12.dp),
+            )
             OutlinedTextField(
                 value = state.raceName,
                 onValueChange = { onStateChange(state.copy(raceName = it)) },
@@ -370,8 +392,10 @@ private fun OnboardingStep3Screen(
 @Composable
 private fun SettingsSheet(
     state: AthleteProfileDraft,
+    healthConnectStatus: HealthConnectUiStatus,
     saveMessage: String,
     onStateChange: (AthleteProfileDraft) -> Unit,
+    onConnectHealth: () -> Unit,
     onDismiss: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -435,6 +459,13 @@ private fun SettingsSheet(
                 label = "Preferred session length",
                 onSelect = { onStateChange(state.copy(preferredSessionLength = it)) },
             )
+            HealthConnectCard(
+                status = healthConnectStatus,
+                enabled = state.healthConnectEnabled,
+                onConnect = onConnectHealth,
+                onSkip = { onStateChange(state.copy(healthConnectEnabled = false)) },
+                modifier = Modifier.padding(top = 16.dp),
+            )
             InsightCard(
                 title = "Sync status",
                 body = saveMessage,
@@ -454,14 +485,16 @@ private fun HomeScreen(
     recommendation: BreathworkRecommendation,
     latestCheckIn: DailyCheckIn?,
     recentSessions: List<BreathworkSession>,
+    healthConnectStatus: HealthConnectUiStatus,
     onStart: () -> Unit,
     onHistory: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    val readiness = remember(latestCheckIn, recentSessions, profile.raceName, profile.raceDate) {
+    val readiness = remember(latestCheckIn, recentSessions, healthConnectStatus.metrics, profile.raceName, profile.raceDate) {
         ReadinessCalculator.calculate(
             latestCheckIn = latestCheckIn,
             recentSessions = recentSessions,
+            healthMetrics = healthConnectStatus.metrics,
             raceName = profile.raceName,
             raceDate = profile.raceDate,
         )
@@ -613,6 +646,12 @@ private fun ReadinessCard(
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f),
                         modifier = Modifier.padding(top = 4.dp),
                     )
+                    Text(
+                        text = readiness.sourceLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.64f),
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
                 Text(
                     text = "${readiness.score}",
@@ -634,6 +673,88 @@ private fun ReadinessCard(
             )
         }
     }
+}
+
+@Composable
+private fun HealthConnectCard(
+    status: HealthConnectUiStatus,
+    enabled: Boolean,
+    onConnect: () -> Unit,
+    onSkip: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isAvailable = status.availability == HealthConnectAvailability.Available
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)),
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Health Connect",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = status.toDisplayLabel(enabled),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                Switch(
+                    checked = enabled && status.hasRequiredPermissions,
+                    enabled = isAvailable,
+                    onCheckedChange = { checked ->
+                        if (checked) {
+                            onConnect()
+                        } else {
+                            onSkip()
+                        }
+                    },
+                )
+            }
+            Text(
+                text = "Optional: improve readiness using sleep, workouts, and resting heart rate. You can skip this and still use manual check-ins.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(top = 14.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onConnect,
+                    enabled = isAvailable,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (enabled) "Reconnect" else "Connect")
+                }
+                TextButton(
+                    onClick = onSkip,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Skip for now")
+                }
+            }
+        }
+    }
+}
+
+private fun HealthConnectUiStatus.toDisplayLabel(enabled: Boolean): String = when {
+    availability == HealthConnectAvailability.Unavailable -> "Unavailable on this device"
+    availability == HealthConnectAvailability.UpdateRequired -> "Update Health Connect to connect"
+    enabled && metrics?.hasData == true -> "Connected: readiness can use recent health data"
+    enabled && hasRequiredPermissions -> "Connected: waiting for recent health data"
+    enabled -> "Enabled, but permissions need review"
+    else -> "Not connected"
 }
 
 @Composable

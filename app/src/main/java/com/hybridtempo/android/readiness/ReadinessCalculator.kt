@@ -12,7 +12,17 @@ data class ReadinessScore(
     val label: String,
     val summary: String,
     val nudge: String,
+    val sourceLabel: String = "Manual inputs",
 )
+
+data class HealthMetricsSnapshot(
+    val sleepMinutesLastNight: Int? = null,
+    val workoutsLast7Days: Int? = null,
+    val restingHeartRateBpm: Long? = null,
+) {
+    val hasData: Boolean
+        get() = sleepMinutesLastNight != null || workoutsLast7Days != null || restingHeartRateBpm != null
+}
 
 data class RaceCountdown(
     val title: String,
@@ -23,6 +33,7 @@ object ReadinessCalculator {
     fun calculate(
         latestCheckIn: DailyCheckIn?,
         recentSessions: List<BreathworkSession>,
+        healthMetrics: HealthMetricsSnapshot? = null,
         today: LocalDate = LocalDate.now(),
         raceName: String = "",
         raceDate: String = "",
@@ -44,18 +55,20 @@ object ReadinessCalculator {
             ((latestCheckIn.energy - 5) * 5) +
             ((5 - latestCheckIn.stress) * 4) +
             ((5 - latestCheckIn.soreness) * 3) +
-            consistencyBonus
+            consistencyBonus +
+            healthMetrics.toHealthScoreAdjustment()
 
         val score = rawScore.coerceIn(20, 95)
         return ReadinessScore(
             score = score,
             label = score.toReadinessLabel(),
-            summary = latestCheckIn.toReadinessSummary(),
+            summary = latestCheckIn.toReadinessSummary(healthMetrics),
             nudge = buildNudge(score, consistencyBonus),
+            sourceLabel = if (healthMetrics?.hasData == true) "Manual + Health Connect" else "Manual inputs",
         )
     }
 
-    private fun DailyCheckIn.toReadinessSummary(): String {
+    private fun DailyCheckIn.toReadinessSummary(healthMetrics: HealthMetricsSnapshot?): String {
         val energySignal = if (energy >= 7) {
             "Energy is supporting readiness"
         } else if (energy <= 4) {
@@ -71,7 +84,47 @@ object ReadinessCalculator {
             else -> "stress and soreness are manageable"
         }
 
-        return "$energySignal; $loadSignal."
+        val healthSignal = healthMetrics?.sleepMinutesLastNight?.let { sleepMinutes ->
+            if (sleepMinutes >= 420) {
+                " sleep data supports recovery."
+            } else if (sleepMinutes < 360) {
+                " sleep was short, so recovery needs attention."
+            } else {
+                " sleep was moderate."
+            }
+        }.orEmpty()
+
+        return "$energySignal; $loadSignal.$healthSignal"
+    }
+
+    private fun HealthMetricsSnapshot?.toHealthScoreAdjustment(): Int {
+        if (this?.hasData != true) return 0
+
+        val sleepAdjustment = sleepMinutesLastNight?.let {
+            when {
+                it >= 420 -> 5
+                it < 360 -> -5
+                else -> 0
+            }
+        } ?: 0
+
+        val workoutAdjustment = workoutsLast7Days?.let {
+            when {
+                it >= 6 -> -2
+                it in 2..5 -> 2
+                else -> 0
+            }
+        } ?: 0
+
+        val heartRateAdjustment = restingHeartRateBpm?.let {
+            when {
+                it <= 55 -> 2
+                it >= 75 -> -3
+                else -> 0
+            }
+        } ?: 0
+
+        return sleepAdjustment + workoutAdjustment + heartRateAdjustment
     }
 
     private fun buildNudge(

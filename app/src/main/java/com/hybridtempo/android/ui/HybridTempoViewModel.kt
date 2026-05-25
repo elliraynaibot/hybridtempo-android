@@ -8,6 +8,9 @@ import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
 import com.hybridtempo.android.data.FirebaseHybridTempoRepository
+import com.hybridtempo.android.health.HealthConnectAvailability
+import com.hybridtempo.android.health.HealthConnectManager
+import com.hybridtempo.android.health.HealthConnectUiStatus
 import com.hybridtempo.android.recommendation.AthleteProfileContext
 import com.hybridtempo.android.recommendation.BackendRecommendationEngine
 import com.hybridtempo.android.recommendation.CheckInContext
@@ -44,6 +47,7 @@ data class AthleteProfileDraft(
     val eveningReminderEnabled: Boolean = false,
     val eveningReminderHour: Int = 20,
     val eveningReminderMinute: Int = 30,
+    val healthConnectEnabled: Boolean = false,
 )
 
 data class HybridTempoUiState(
@@ -58,6 +62,7 @@ data class HybridTempoUiState(
     val isRefreshingRecommendation: Boolean = false,
     val recentSessions: List<BreathworkSession> = emptyList(),
     val recentCheckIns: List<DailyCheckIn> = emptyList(),
+    val healthConnectStatus: HealthConnectUiStatus = HealthConnectUiStatus(),
     val saveMessage: String = "Firebase persistence is ready when app/google-services.json is added.",
     val isSaving: Boolean = false,
 )
@@ -67,12 +72,14 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
     private val previewRecommendationEngine: RecommendationEngine = DeterministicRecommendationEngine()
     private val backendRecommendationEngine: RecommendationEngine = BackendRecommendationEngine()
     private val reminderScheduler = RecoveryReminderScheduler(application.applicationContext)
+    private val healthConnectManager = HealthConnectManager(application.applicationContext)
     private val _uiState = MutableStateFlow(HybridTempoUiState())
     val uiState: StateFlow<HybridTempoUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             loadProfile()
+            refreshHealthConnectStatus()
             refreshHistory()
             refreshCheckIns()
         }
@@ -109,6 +116,25 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(profileDraft = draft) }
     }
 
+    fun onHealthConnectPermissionsResult(grantedPermissions: Set<String>) {
+        val enabled = grantedPermissions.intersect(HealthConnectManager.PERMISSIONS).isNotEmpty()
+        _uiState.update {
+            it.copy(
+                profileDraft = it.profileDraft.copy(healthConnectEnabled = enabled),
+                healthConnectStatus = it.healthConnectStatus.copy(
+                    enabled = enabled,
+                    grantedPermissions = grantedPermissions,
+                    message = if (enabled) {
+                        "Health Connect connected. Save profile to keep this preference."
+                    } else {
+                        "Health Connect was skipped. Manual check-ins still work."
+                    },
+                ),
+            )
+        }
+        refreshHealthConnectStatus()
+    }
+
     fun saveProfile() {
         val profileDraft = _uiState.value.profileDraft
         viewModelScope.launch {
@@ -133,6 +159,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 hour = profileDraft.eveningReminderHour,
                 minute = profileDraft.eveningReminderMinute,
             )
+            refreshHealthConnectStatus()
             refreshPreviewRecommendation()
         }
     }
@@ -251,6 +278,40 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
     }
+
+    private fun refreshHealthConnectStatus() {
+        viewModelScope.launch {
+            val availability = healthConnectManager.availability()
+            val enabled = _uiState.value.profileDraft.healthConnectEnabled
+            val grantedPermissions = runCatching { healthConnectManager.grantedPermissions() }.getOrDefault(emptySet())
+            val metrics = if (enabled) {
+                runCatching { healthConnectManager.readSnapshot(grantedPermissions) }.getOrNull()
+            } else {
+                null
+            }
+            val message = when {
+                availability == HealthConnectAvailability.Unavailable -> "Health Connect is unavailable on this device. Manual check-ins still work."
+                availability == HealthConnectAvailability.UpdateRequired -> "Install or update Health Connect to use wearable recovery signals."
+                !enabled -> "Health Connect is optional. Manual check-ins still power recommendations."
+                grantedPermissions.intersect(HealthConnectManager.PERMISSIONS).isEmpty() -> "Health Connect is enabled, but permissions are not granted."
+                metrics?.hasData == true -> "Health Connect connected. Readiness includes recent health data."
+                else -> "Health Connect connected. Waiting for sleep, workout, or resting HR data."
+            }
+
+            _uiState.update {
+                it.copy(
+                    healthConnectStatus = HealthConnectUiStatus(
+                        availability = availability,
+                        enabled = enabled,
+                        grantedPermissions = grantedPermissions,
+                        metrics = metrics,
+                        message = message,
+                    ),
+                )
+            }
+            refreshPreviewRecommendation()
+        }
+    }
 }
 
 private fun HybridTempoUiState.toRecommendationRequest(): RecommendationRequest = RecommendationRequest(
@@ -288,6 +349,7 @@ private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProf
     eveningReminderEnabled = eveningReminderEnabled,
     eveningReminderHour = eveningReminderHour,
     eveningReminderMinute = eveningReminderMinute,
+    healthConnectEnabled = healthConnectEnabled,
 )
 
 private fun AthleteProfile.toAthleteProfileDraft(): AthleteProfileDraft = AthleteProfileDraft(
@@ -301,6 +363,7 @@ private fun AthleteProfile.toAthleteProfileDraft(): AthleteProfileDraft = Athlet
     eveningReminderEnabled = eveningReminderEnabled,
     eveningReminderHour = eveningReminderHour,
     eveningReminderMinute = eveningReminderMinute,
+    healthConnectEnabled = healthConnectEnabled,
 )
 
 private fun AthleteProfileDraft.toProfileContext(): AthleteProfileContext = AthleteProfileContext(

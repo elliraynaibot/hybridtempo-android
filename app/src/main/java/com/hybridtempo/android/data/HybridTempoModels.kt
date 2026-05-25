@@ -14,6 +14,7 @@ data class AthleteProfile(
     val eveningReminderEnabled: Boolean = false,
     val eveningReminderHour: Int = 20,
     val eveningReminderMinute: Int = 30,
+    val healthConnectEnabled: Boolean = false,
 )
 
 data class DailyCheckIn(
