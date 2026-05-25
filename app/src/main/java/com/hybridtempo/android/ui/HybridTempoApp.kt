@@ -76,6 +76,8 @@ import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
+import com.hybridtempo.android.readiness.RaceCountdown
+import com.hybridtempo.android.readiness.RaceCountdownCalculator
 import com.hybridtempo.android.readiness.ReadinessCalculator
 import com.hybridtempo.android.readiness.ReadinessScore
 import com.hybridtempo.android.recommendation.RecommendationQuota
@@ -464,6 +466,12 @@ private fun HomeScreen(
             raceDate = profile.raceDate,
         )
     }
+    val raceCountdown = remember(profile.raceName, profile.raceDate) {
+        RaceCountdownCalculator.calculate(
+            raceName = profile.raceName,
+            raceDate = profile.raceDate,
+        )
+    }
 
     ScreenFrame {
         Row(
@@ -512,6 +520,12 @@ private fun HomeScreen(
             readiness = readiness,
             modifier = Modifier.padding(top = 28.dp),
         )
+        raceCountdown?.let {
+            RaceCountdownCard(
+                countdown = it,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
         InsightCard(
             title = "Today's check-in",
             body = latestCheckIn?.let {
@@ -528,6 +542,45 @@ private fun HomeScreen(
                 .padding(top = 12.dp),
         ) {
             Text("View history")
+        }
+    }
+}
+
+@Composable
+private fun RaceCountdownCard(
+    countdown: RaceCountdown,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(22.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Race countdown",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = countdown.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Text(
+                text = countdown.label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.End,
+                modifier = Modifier.padding(start = 12.dp),
+            )
         }
     }
 }

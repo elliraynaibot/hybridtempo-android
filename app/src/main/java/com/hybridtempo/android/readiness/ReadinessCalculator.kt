@@ -14,6 +14,11 @@ data class ReadinessScore(
     val nudge: String,
 )
 
+data class RaceCountdown(
+    val title: String,
+    val label: String,
+)
+
 object ReadinessCalculator {
     fun calculate(
         latestCheckIn: DailyCheckIn?,
@@ -46,7 +51,7 @@ object ReadinessCalculator {
             score = score,
             label = score.toReadinessLabel(),
             summary = latestCheckIn.toReadinessSummary(),
-            nudge = buildNudge(score, consistencyBonus, raceName, raceDate, today),
+            nudge = buildNudge(score, consistencyBonus),
         )
     }
 
@@ -72,21 +77,12 @@ object ReadinessCalculator {
     private fun buildNudge(
         score: Int,
         consistencyBonus: Int,
-        raceName: String,
-        raceDate: String,
-        today: LocalDate,
     ): String {
-        val raceContext = raceDate.toLocalDateOrNull()?.let { date ->
-            val days = ChronoUnit.DAYS.between(today, date).toInt().coerceAtLeast(0)
-            val name = raceName.takeIf { it.isNotBlank() } ?: "race day"
-            " ${days} days until $name."
-        }.orEmpty()
-
         return when {
-            score >= 75 && consistencyBonus >= 3 -> "Keep the rhythm: today's signal supports normal training and a short recovery session.$raceContext"
-            score >= 75 -> "Good signal today. Add a short session to keep recovery consistency moving.$raceContext"
-            score >= 60 -> "Stay steady: use breathwork to downshift before adding more training stress.$raceContext"
-            else -> "Prioritize recovery today: choose a longer downregulation or sleep-transition session.$raceContext"
+            score >= 75 && consistencyBonus >= 3 -> "Keep the rhythm: today's signal supports normal training and a short recovery session."
+            score >= 75 -> "Good signal today. Add a short session to keep recovery consistency moving."
+            score >= 60 -> "Stay steady: use breathwork to downshift before adding more training stress."
+            else -> "Prioritize recovery today: choose a longer downregulation or sleep-transition session."
         }
     }
 
@@ -95,6 +91,26 @@ object ReadinessCalculator {
         this >= 60 -> "Building"
         this >= 45 -> "Manage load"
         else -> "Recover first"
+    }
+}
+
+object RaceCountdownCalculator {
+    fun calculate(
+        raceName: String,
+        raceDate: String,
+        today: LocalDate = LocalDate.now(),
+    ): RaceCountdown? {
+        val date = raceDate.toLocalDateOrNull() ?: return null
+        val title = raceName.takeIf { it.isNotBlank() } ?: "Race day"
+        val days = ChronoUnit.DAYS.between(today, date).toInt()
+        val label = when {
+            days > 1 -> "$days days out"
+            days == 1 -> "1 day out"
+            days == 0 -> "Race day is today"
+            else -> "Race date has passed"
+        }
+
+        return RaceCountdown(title = title, label = label)
     }
 }
 

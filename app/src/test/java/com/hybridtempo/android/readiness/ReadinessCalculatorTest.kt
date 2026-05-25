@@ -49,7 +49,7 @@ class ReadinessCalculatorTest {
     }
 
     @Test
-    fun `handles past race date without crashing`() {
+    fun `readiness nudge does not include race countdown`() {
         val readiness = ReadinessCalculator.calculate(
             latestCheckIn = DailyCheckIn(energy = 6, stress = 5, soreness = 5),
             recentSessions = emptyList(),
@@ -58,7 +58,49 @@ class ReadinessCalculatorTest {
             raceDate = "2026-05-20",
         )
 
-        assertTrue(readiness.nudge.contains("0 days until HYROX Toronto"))
+        assertTrue(!readiness.nudge.contains("HYROX Toronto"))
+    }
+
+    @Test
+    fun `builds future race countdown label`() {
+        val countdown = RaceCountdownCalculator.calculate(
+            raceName = "HYROX Toronto",
+            raceDate = "2026-06-20",
+            today = LocalDate.of(2026, 5, 25),
+        )
+
+        assertEquals("HYROX Toronto", countdown?.title)
+        assertEquals("26 days out", countdown?.label)
+    }
+
+    @Test
+    fun `builds today and past race countdown labels`() {
+        val todayCountdown = RaceCountdownCalculator.calculate(
+            raceName = "",
+            raceDate = "2026-05-25",
+            today = LocalDate.of(2026, 5, 25),
+        )
+        val pastCountdown = RaceCountdownCalculator.calculate(
+            raceName = "HYROX Toronto",
+            raceDate = "2026-05-20",
+            today = LocalDate.of(2026, 5, 25),
+        )
+
+        assertEquals("Race day", todayCountdown?.title)
+        assertEquals("Race day is today", todayCountdown?.label)
+        assertEquals("HYROX Toronto", pastCountdown?.title)
+        assertEquals("Race date has passed", pastCountdown?.label)
+    }
+
+    @Test
+    fun `returns null without a valid race date`() {
+        val countdown = RaceCountdownCalculator.calculate(
+            raceName = "HYROX Toronto",
+            raceDate = "",
+            today = LocalDate.of(2026, 5, 25),
+        )
+
+        assertEquals(null, countdown)
     }
 
     private fun session(protocol: String, date: LocalDate): BreathworkSession = BreathworkSession(
