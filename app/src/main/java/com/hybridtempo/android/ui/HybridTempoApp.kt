@@ -216,7 +216,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         onSettings = { showSettings = true },
                         onFinish = {
                             viewModel.completeCurrentSession()
-                            screen = AppScreen.History
+                            screen = AppScreen.Home
                         },
                     )
 
@@ -228,6 +228,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         saveMessage = uiState.saveMessage,
                         onSettings = { showSettings = true },
                         onCheckIn = { screen = AppScreen.CheckIn },
+                        onHome = { screen = AppScreen.Home },
                     )
                 }
             }
@@ -1061,6 +1062,7 @@ private fun HistoryScreen(
     saveMessage: String,
     onSettings: () -> Unit,
     onCheckIn: () -> Unit,
+    onHome: () -> Unit,
 ) {
     val summary = remember(sessions) { sessions.toHistorySummary() }
 
@@ -1094,6 +1096,14 @@ private fun HistoryScreen(
         }
         Spacer(modifier = Modifier.height(36.dp))
         PrimaryAction(text = "New check-in", onClick = onCheckIn)
+        OutlinedButton(
+            onClick = onHome,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Back to readiness")
+        }
     }
 }
 
