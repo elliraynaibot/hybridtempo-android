@@ -14,6 +14,46 @@ class DeterministicRecommendationEngine : RecommendationEngine {
         val risingStress = request.recentTrends.stress.isRising()
 
         val recommendation = when {
+            checkIn.sessionIntent == "pre_workout" -> BreathworkRecommendation(
+                protocol = "Activation",
+                durationMinutes = checkIn.timeAvailable,
+                rationale = "You chose pre-workout breathwork, so this session is designed to sharpen focus and controlled arousal before training.",
+                cadence = "3 second inhale · 3 second exhale",
+                breathworkProtocol = BreathworkProtocol.activation(checkIn.timeAvailable),
+            )
+
+            checkIn.sessionIntent == "evening_downshift" -> BreathworkRecommendation(
+                protocol = "Sleep transition",
+                durationMinutes = checkIn.timeAvailable,
+                rationale = "You chose evening breathwork, so this session emphasizes longer exhales to help shift toward sleep and recovery.",
+                cadence = "4 second inhale · 7 second exhale",
+                breathworkProtocol = BreathworkProtocol.sleepTransition(checkIn.timeAvailable),
+            )
+
+            checkIn.sessionIntent == "general_reset" -> BreathworkRecommendation(
+                protocol = "Recovery reset",
+                durationMinutes = checkIn.timeAvailable,
+                rationale = "You chose a general reset, so this keeps the cadence balanced and restorative without assuming a workout just happened.",
+                cadence = "4 second inhale · 4 second exhale",
+                breathworkProtocol = BreathworkProtocol.recoveryReset(checkIn.timeAvailable),
+            )
+
+            checkIn.sessionIntent == "post_workout" && highLoad && highStress -> BreathworkRecommendation(
+                protocol = "Downregulation",
+                durationMinutes = checkIn.timeAvailable,
+                rationale = "You chose post-workout breathwork and your load/stress is high, so this uses extended exhales to downshift.",
+                cadence = "4 second inhale · 6 second exhale",
+                breathworkProtocol = BreathworkProtocol.downregulation(checkIn.timeAvailable),
+            )
+
+            checkIn.sessionIntent == "post_workout" -> BreathworkRecommendation(
+                protocol = "Post-training recovery",
+                durationMinutes = checkIn.timeAvailable,
+                rationale = "You chose post-workout breathwork, so this focuses on a steady transition into recovery.",
+                cadence = "4 second inhale · 5 second exhale",
+                breathworkProtocol = BreathworkProtocol.postTrainingRecovery(checkIn.timeAvailable),
+            )
+
             wantsSleepSupport && (highStress || risingStress) -> BreathworkRecommendation(
                 protocol = "Sleep transition",
                 durationMinutes = checkIn.timeAvailable,

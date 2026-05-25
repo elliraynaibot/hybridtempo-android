@@ -61,6 +61,7 @@ type RecommendationRequest = {
     workoutType: string;
     workoutIntensity: number;
     timeAvailable: number;
+    sessionIntent: string;
   };
   recentTrends?: {
     energy?: number[];
@@ -166,6 +167,7 @@ function validateRecommendationRequest(data: unknown): RecommendationRequest {
       workoutType: readString(checkIn.workoutType, "checkIn.workoutType"),
       workoutIntensity: readRange(checkIn.workoutIntensity, "checkIn.workoutIntensity", 1, 10),
       timeAvailable: readDuration(checkIn.timeAvailable, "checkIn.timeAvailable"),
+      sessionIntent: readOptionalString(checkIn.sessionIntent) || "post_workout",
     },
     recentTrends: isRecord(recentTrends) ? {
       energy: readTrend(recentTrends.energy),
@@ -185,6 +187,61 @@ function deterministicRecommendation(request: RecommendationRequest): Recommenda
   const lowEnergy = checkIn.energy <= 4;
   const wantsSleepSupport = goals.includes("sleep support");
   const risingStress = isRising(request.recentTrends?.stress ?? []);
+
+  if (checkIn.sessionIntent === "pre_workout") {
+    return {
+      protocol: "Activation",
+      durationMinutes: checkIn.timeAvailable,
+      rationale: "You chose pre-workout breathwork, so this session is designed to sharpen focus and controlled arousal before training.",
+      cadence: "3 second inhale · 3 second exhale",
+      source: "deterministicFallback",
+      breathworkProtocol: activation(checkIn.timeAvailable),
+    };
+  }
+
+  if (checkIn.sessionIntent === "evening_downshift") {
+    return {
+      protocol: "Sleep transition",
+      durationMinutes: checkIn.timeAvailable,
+      rationale: "You chose evening breathwork, so this session emphasizes longer exhales to help shift toward sleep and recovery.",
+      cadence: "4 second inhale · 7 second exhale",
+      source: "deterministicFallback",
+      breathworkProtocol: sleepTransition(checkIn.timeAvailable),
+    };
+  }
+
+  if (checkIn.sessionIntent === "general_reset") {
+    return {
+      protocol: "Recovery reset",
+      durationMinutes: checkIn.timeAvailable,
+      rationale: "You chose a general reset, so this keeps the cadence balanced and restorative without assuming a workout just happened.",
+      cadence: "4 second inhale · 4 second exhale",
+      source: "deterministicFallback",
+      breathworkProtocol: recoveryReset(checkIn.timeAvailable),
+    };
+  }
+
+  if (checkIn.sessionIntent === "post_workout" && highLoad && highStress) {
+    return {
+      protocol: "Downregulation",
+      durationMinutes: checkIn.timeAvailable,
+      rationale: "You chose post-workout breathwork and your load/stress is high, so this uses extended exhales to downshift.",
+      cadence: "4 second inhale · 6 second exhale",
+      source: "deterministicFallback",
+      breathworkProtocol: downregulation(checkIn.timeAvailable),
+    };
+  }
+
+  if (checkIn.sessionIntent === "post_workout") {
+    return {
+      protocol: "Post-training recovery",
+      durationMinutes: checkIn.timeAvailable,
+      rationale: "You chose post-workout breathwork, so this focuses on a steady transition into recovery.",
+      cadence: "4 second inhale · 5 second exhale",
+      source: "deterministicFallback",
+      breathworkProtocol: postTrainingRecovery(checkIn.timeAvailable),
+    };
+  }
 
   if (wantsSleepSupport && (highStress || risingStress)) {
     return {

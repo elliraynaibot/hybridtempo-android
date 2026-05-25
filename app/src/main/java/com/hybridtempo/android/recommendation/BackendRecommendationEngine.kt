@@ -77,6 +77,7 @@ private fun RecommendationRequest.toCallableMap(): Map<String, Any> = mapOf(
         "workoutType" to checkIn.workoutType,
         "workoutIntensity" to checkIn.workoutIntensity,
         "timeAvailable" to checkIn.timeAvailable,
+        "sessionIntent" to checkIn.sessionIntent,
     ),
     "recentTrends" to mapOf(
         "energy" to recentTrends.energy,

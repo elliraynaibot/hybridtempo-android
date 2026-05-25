@@ -27,6 +27,7 @@ data class DailyCheckIn(
     val workoutType: String = "Hybrid",
     val workoutDurationMinutes: Int = 45,
     val workoutIntensity: Int = 7,
+    val sessionIntent: String = "post_workout",
     val createdAt: String = Instant.now().toString(),
 )
 

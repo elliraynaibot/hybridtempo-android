@@ -24,6 +24,7 @@ data class CheckInContext(
     val workoutType: String,
     val workoutIntensity: Int,
     val timeAvailable: Int,
+    val sessionIntent: String = "post_workout",
 )
 
 data class RecentTrendContext(

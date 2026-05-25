@@ -90,6 +90,7 @@ class FirebaseHybridTempoRepository(
                     workoutType = document.getString("workoutType").orEmpty(),
                     workoutDurationMinutes = document.getLong("workoutDurationMinutes")?.toInt() ?: 0,
                     workoutIntensity = document.getLong("workoutIntensity")?.toInt() ?: 0,
+                    sessionIntent = document.getString("sessionIntent") ?: "post_workout",
                     createdAt = document.getString("createdAt").orEmpty(),
                 )
             }
@@ -182,6 +183,7 @@ private fun DailyCheckIn.toFirestoreMap(): Map<String, Any> = mapOf(
     "workoutType" to workoutType,
     "workoutDurationMinutes" to workoutDurationMinutes,
     "workoutIntensity" to workoutIntensity,
+    "sessionIntent" to sessionIntent,
     "createdAt" to createdAt,
 )
 

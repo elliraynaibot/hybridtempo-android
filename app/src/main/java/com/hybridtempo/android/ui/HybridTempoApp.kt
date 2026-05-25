@@ -885,6 +885,17 @@ private fun CheckInScreen(
             title = "How are you feeling?",
             onSettings = onSettings,
         )
+        Text(
+            text = "What do you want this session to do?",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+        )
+        SessionIntentGrid(
+            selected = state.sessionIntent,
+            onSelect = { onStateChange(state.copy(sessionIntent = it)) },
+        )
+        Spacer(modifier = Modifier.height(18.dp))
         ScoreSlider("Energy", state.energy) { onStateChange(state.copy(energy = it)) }
         ScoreSlider("Stress", state.stress) { onStateChange(state.copy(stress = it)) }
         ScoreSlider("Soreness", state.soreness) { onStateChange(state.copy(soreness = it)) }
@@ -912,6 +923,39 @@ private fun CheckInScreen(
                 .padding(top = 12.dp),
         ) {
             Text("Back to readiness")
+        }
+    }
+}
+
+private data class SessionIntentOption(
+    val label: String,
+    val value: String,
+)
+
+@Composable
+private fun SessionIntentGrid(
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    val options = listOf(
+        SessionIntentOption("Before workout", "pre_workout"),
+        SessionIntentOption("After workout", "post_workout"),
+        SessionIntentOption("Evening", "evening_downshift"),
+        SessionIntentOption("Reset", "general_reset"),
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        options.chunked(2).forEach { rowOptions ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rowOptions.forEach { option ->
+                    SelectButton(
+                        text = option.label,
+                        selected = selected == option.value,
+                        onClick = { onSelect(option.value) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
     }
 }

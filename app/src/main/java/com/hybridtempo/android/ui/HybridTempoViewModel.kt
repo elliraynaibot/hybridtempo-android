@@ -34,6 +34,7 @@ data class CheckInDraft(
     val workoutType: String = "Hybrid",
     val workoutIntensity: Int = 7,
     val timeAvailable: Int = 5,
+    val sessionIntent: String = "post_workout",
 )
 
 data class AthleteProfileDraft(
@@ -327,6 +328,7 @@ private fun CheckInDraft.toDailyCheckIn(): DailyCheckIn = DailyCheckIn(
     timeAvailable = timeAvailable,
     workoutType = workoutType,
     workoutIntensity = workoutIntensity,
+    sessionIntent = sessionIntent,
 )
 
 private fun CheckInDraft.toCheckInContext(): CheckInContext = CheckInContext(
@@ -336,6 +338,7 @@ private fun CheckInDraft.toCheckInContext(): CheckInContext = CheckInContext(
     workoutType = workoutType,
     workoutIntensity = workoutIntensity,
     timeAvailable = timeAvailable,
+    sessionIntent = sessionIntent,
 )
 
 private fun AthleteProfileDraft.toAthleteProfile(): AthleteProfile = AthleteProfile(
