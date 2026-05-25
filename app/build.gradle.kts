@@ -42,4 +42,6 @@ dependencies {
     implementation(libs.media3.exoplayer)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+    testImplementation(kotlin("test"))
 }

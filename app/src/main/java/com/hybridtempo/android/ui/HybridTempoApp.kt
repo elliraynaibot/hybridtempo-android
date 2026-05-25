@@ -76,6 +76,8 @@ import com.hybridtempo.android.data.BreathworkProtocol
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
+import com.hybridtempo.android.readiness.ReadinessCalculator
+import com.hybridtempo.android.readiness.ReadinessScore
 import com.hybridtempo.android.recommendation.RecommendationQuota
 import com.hybridtempo.android.recommendation.RecommendationSource
 import java.time.LocalDate
@@ -162,9 +164,11 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     )
 
                     AppScreen.Home -> HomeScreen(
+                        profile = uiState.profileDraft,
                         draft = uiState.draft,
                         recommendation = uiState.recommendation,
                         latestCheckIn = uiState.recentCheckIns.firstOrNull(),
+                        recentSessions = uiState.recentSessions,
                         onStart = { screen = AppScreen.CheckIn },
                         onHistory = { screen = AppScreen.History },
                         onSettings = { showSettings = true },
@@ -443,13 +447,24 @@ private fun SettingsSheet(
 
 @Composable
 private fun HomeScreen(
+    profile: AthleteProfileDraft,
     draft: CheckInDraft,
     recommendation: BreathworkRecommendation,
     latestCheckIn: DailyCheckIn?,
+    recentSessions: List<BreathworkSession>,
     onStart: () -> Unit,
     onHistory: () -> Unit,
     onSettings: () -> Unit,
 ) {
+    val readiness = remember(latestCheckIn, recentSessions, profile.raceName, profile.raceDate) {
+        ReadinessCalculator.calculate(
+            latestCheckIn = latestCheckIn,
+            recentSessions = recentSessions,
+            raceName = profile.raceName,
+            raceDate = profile.raceDate,
+        )
+    }
+
     ScreenFrame {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -493,12 +508,16 @@ private fun HomeScreen(
                 )
             }
         }
+        ReadinessCard(
+            readiness = readiness,
+            modifier = Modifier.padding(top = 28.dp),
+        )
         InsightCard(
             title = "Today's check-in",
             body = latestCheckIn?.let {
                 "${it.workoutType} · Energy ${it.energy}/10 · Stress ${it.stress}/10 · Soreness ${it.soreness}/10"
             } ?: "Preview: ${draft.workoutType} · Energy ${draft.energy}/10 · Stress ${draft.stress}/10 · Soreness ${draft.soreness}/10 → ${recommendation.protocol}",
-            modifier = Modifier.padding(top = 28.dp),
+            modifier = Modifier.padding(top = 14.dp),
         )
         Spacer(modifier = Modifier.height(30.dp))
         PrimaryAction(text = "Start check-in", onClick = onStart)
@@ -509,6 +528,57 @@ private fun HomeScreen(
                 .padding(top = 12.dp),
         ) {
             Text("View history")
+        }
+    }
+}
+
+@Composable
+private fun ReadinessCard(
+    readiness: ReadinessScore,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = RoundedCornerShape(28.dp),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Recovery readiness",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = readiness.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                Text(
+                    text = "${readiness.score}",
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Black,
+                )
+            }
+            Text(
+                text = readiness.summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            Text(
+                text = readiness.nudge,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f),
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
 }
