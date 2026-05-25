@@ -72,6 +72,29 @@ class ReadinessCalculatorTest {
     }
 
     @Test
+    fun `prompts for manual check-in when health connect has weak signal`() {
+        val prompt = ManualDetailsPromptCalculator.calculate(
+            latestCheckIn = null,
+            healthMetrics = null,
+            healthConnectEnabled = true,
+        )
+
+        assertEquals("Add today's manual check-in", prompt?.title)
+        assertTrue(prompt?.body?.contains("Health Connect is connected") == true)
+    }
+
+    @Test
+    fun `does not prompt for manual details after check-in exists`() {
+        val prompt = ManualDetailsPromptCalculator.calculate(
+            latestCheckIn = DailyCheckIn(energy = 6, stress = 5, soreness = 5),
+            healthMetrics = null,
+            healthConnectEnabled = true,
+        )
+
+        assertEquals(null, prompt)
+    }
+
+    @Test
     fun `readiness nudge does not include race countdown`() {
         val readiness = ReadinessCalculator.calculate(
             latestCheckIn = DailyCheckIn(energy = 6, stress = 5, soreness = 5),

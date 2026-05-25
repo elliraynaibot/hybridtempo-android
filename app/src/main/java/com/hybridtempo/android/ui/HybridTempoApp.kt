@@ -81,6 +81,8 @@ import com.hybridtempo.android.health.HealthConnectManager
 import com.hybridtempo.android.health.HealthConnectUiStatus
 import com.hybridtempo.android.readiness.RaceCountdown
 import com.hybridtempo.android.readiness.RaceCountdownCalculator
+import com.hybridtempo.android.readiness.ManualDetailsPrompt
+import com.hybridtempo.android.readiness.ManualDetailsPromptCalculator
 import com.hybridtempo.android.readiness.ReadinessCalculator
 import com.hybridtempo.android.readiness.ReadinessScore
 import com.hybridtempo.android.recommendation.RecommendationQuota
@@ -505,6 +507,13 @@ private fun HomeScreen(
             raceDate = profile.raceDate,
         )
     }
+    val manualDetailsPrompt = remember(latestCheckIn, healthConnectStatus.metrics, healthConnectStatus.enabled) {
+        ManualDetailsPromptCalculator.calculate(
+            latestCheckIn = latestCheckIn,
+            healthMetrics = healthConnectStatus.metrics,
+            healthConnectEnabled = healthConnectStatus.enabled,
+        )
+    }
 
     ScreenFrame {
         Row(
@@ -553,6 +562,13 @@ private fun HomeScreen(
             readiness = readiness,
             modifier = Modifier.padding(top = 28.dp),
         )
+        manualDetailsPrompt?.let {
+            ManualDetailsPromptCard(
+                prompt = it,
+                onStart = onStart,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
         raceCountdown?.let {
             RaceCountdownCard(
                 countdown = it,
@@ -575,6 +591,41 @@ private fun HomeScreen(
                 .padding(top = 12.dp),
         ) {
             Text("View history")
+        }
+    }
+}
+
+@Composable
+private fun ManualDetailsPromptCard(
+    prompt: ManualDetailsPrompt,
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Text(
+                text = prompt.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = prompt.body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.76f),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            OutlinedButton(
+                onClick = onStart,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
+            ) {
+                Text(prompt.actionLabel)
+            }
         }
     }
 }

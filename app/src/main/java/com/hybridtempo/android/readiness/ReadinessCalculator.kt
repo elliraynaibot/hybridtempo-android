@@ -29,6 +29,12 @@ data class RaceCountdown(
     val label: String,
 )
 
+data class ManualDetailsPrompt(
+    val title: String,
+    val body: String,
+    val actionLabel: String = "Start check-in",
+)
+
 object ReadinessCalculator {
     fun calculate(
         latestCheckIn: DailyCheckIn?,
@@ -144,6 +150,28 @@ object ReadinessCalculator {
         this >= 60 -> "Building"
         this >= 45 -> "Manage load"
         else -> "Recover first"
+    }
+}
+
+object ManualDetailsPromptCalculator {
+    fun calculate(
+        latestCheckIn: DailyCheckIn?,
+        healthMetrics: HealthMetricsSnapshot?,
+        healthConnectEnabled: Boolean,
+    ): ManualDetailsPrompt? {
+        if (latestCheckIn != null) return null
+
+        return if (healthConnectEnabled && healthMetrics?.hasData != true) {
+            ManualDetailsPrompt(
+                title = "Add today's manual check-in",
+                body = "Health Connect is connected, but there is not enough recent signal yet. Energy, stress, and soreness help calibrate readiness today.",
+            )
+        } else {
+            ManualDetailsPrompt(
+                title = "Calibrate today's readiness",
+                body = "Add energy, stress, soreness, and workout context so the recommendation reflects how you feel right now.",
+            )
+        }
     }
 }
 
