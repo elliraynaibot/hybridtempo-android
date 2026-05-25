@@ -7,34 +7,42 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val RecoveryGreen = Color(0xFFD9F26B)
-private val Carbon = Color(0xFF090B0B)
-private val Slate = Color(0xFF151A18)
-private val Bone = Color(0xFFF4F0E8)
-private val Clay = Color(0xFFB77B55)
+private val TempoOrange = Color(0xFFEB470A)
+private val Carbon = Color(0xFF0D0D0D)
+private val SurfaceBlack = Color(0xFF202020)
+private val White = Color(0xFFFFFFFF)
+private val Muted = Color(0xFF999999)
 
 private val DarkColors = darkColorScheme(
-    primary = RecoveryGreen,
-    onPrimary = Carbon,
-    secondary = Clay,
+    primary = TempoOrange,
+    onPrimary = White,
+    secondary = TempoOrange,
     background = Carbon,
-    onBackground = Bone,
-    surface = Slate,
-    onSurface = Bone,
-    surfaceVariant = Color(0xFF202723),
-    onSurfaceVariant = Color(0xFFCBD4C8),
+    onBackground = White,
+    surface = SurfaceBlack,
+    onSurface = White,
+    surfaceVariant = Color(0xFF2F2F2F),
+    onSurfaceVariant = Muted,
+    primaryContainer = Color(0xFF3A160C),
+    onPrimaryContainer = White,
+    secondaryContainer = Color(0xFF202020),
+    onSecondaryContainer = White,
 )
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF526600),
-    onPrimary = Color.White,
-    secondary = Color(0xFF7B4F34),
-    background = Bone,
-    onBackground = Carbon,
-    surface = Color.White,
-    onSurface = Carbon,
-    surfaceVariant = Color(0xFFE1E7D8),
-    onSurfaceVariant = Color(0xFF40483F),
+    primary = TempoOrange,
+    onPrimary = White,
+    secondary = TempoOrange,
+    background = Carbon,
+    onBackground = White,
+    surface = SurfaceBlack,
+    onSurface = White,
+    surfaceVariant = Color(0xFF2F2F2F),
+    onSurfaceVariant = Muted,
+    primaryContainer = Color(0xFF3A160C),
+    onPrimaryContainer = White,
+    secondaryContainer = Color(0xFF202020),
+    onSecondaryContainer = White,
 )
 
 @Composable

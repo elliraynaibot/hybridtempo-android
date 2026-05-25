@@ -94,6 +94,9 @@ import java.time.format.DateTimeParseException
 import kotlinx.coroutines.delay
 
 private enum class AppScreen {
+    Landing,
+    SignIn,
+    SignUp,
     OnboardingStep1,
     OnboardingStep2,
     OnboardingStep3,
@@ -114,7 +117,7 @@ private val AppScreen.isOnboarding: Boolean
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
-    var screen by remember { mutableStateOf(AppScreen.OnboardingStep1) }
+    var screen by remember { mutableStateOf(AppScreen.Landing) }
     var showSettings by remember { mutableStateOf(false) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val healthConnectLauncher = rememberLauncherForActivityResult(
@@ -151,6 +154,27 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                 modifier = Modifier.fillMaxSize(),
             ) { target ->
                 when (target) {
+                    AppScreen.Landing -> LandingScreen(
+                        onGetStarted = { screen = AppScreen.SignUp },
+                        onSignIn = { screen = AppScreen.SignIn },
+                    )
+
+                    AppScreen.SignIn -> SignInScreen(
+                        onBack = { screen = AppScreen.Landing },
+                        onSignIn = {
+                            screen = if (uiState.hasCompletedOnboarding) AppScreen.Home else AppScreen.OnboardingStep1
+                        },
+                        onSignUp = { screen = AppScreen.SignUp },
+                    )
+
+                    AppScreen.SignUp -> SignUpScreen(
+                        onBack = { screen = AppScreen.Landing },
+                        onCreateAccount = {
+                            screen = if (uiState.hasCompletedOnboarding) AppScreen.Home else AppScreen.OnboardingStep1
+                        },
+                        onSignIn = { screen = AppScreen.SignIn },
+                    )
+
                     AppScreen.OnboardingStep1 -> OnboardingStep1Screen(
                         state = uiState.profileDraft,
                         isLoading = uiState.isLoadingProfile,
@@ -248,6 +272,330 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LandingScreen(
+    onGetStarted: () -> Unit,
+    onSignIn: () -> Unit,
+) {
+    AuthScreenFrame {
+        Spacer(modifier = Modifier.height(12.dp))
+        AuthBrandLabel()
+        Spacer(modifier = Modifier.height(56.dp))
+        BreathHeroMark()
+        Spacer(modifier = Modifier.height(48.dp))
+        Text(
+            text = "Breathe.\nRecover.\nPerform.",
+            style = MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Black,
+            lineHeight = 42.sp,
+        )
+        Text(
+            text = "Science-backed breathwork protocols built for hybrid athletes.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 22.dp, start = 18.dp, end = 18.dp),
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        PrimaryAction(text = "GET STARTED", onClick = onGetStarted)
+        AuthGhostButton(text = "Sign In", onClick = onSignIn, modifier = Modifier.padding(top = 12.dp))
+        Text(
+            text = "By continuing you agree to our Terms & Privacy Policy",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.54f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 20.dp),
+        )
+    }
+}
+
+@Composable
+private fun SignInScreen(
+    onBack: () -> Unit,
+    onSignIn: () -> Unit,
+    onSignUp: () -> Unit,
+) {
+    AuthScreenFrame {
+        BackCircleButton(onClick = onBack)
+        Spacer(modifier = Modifier.height(28.dp))
+        AuthBrandLabel()
+        Text(
+            text = "Welcome back",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+        )
+        Text(
+            text = "Sign in to continue your recovery",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 28.dp),
+        )
+        GoogleAuthButton(text = "Continue with Google", onClick = onSignIn)
+        AuthDivider()
+        AuthInput(label = "EMAIL", value = "you@example.com")
+        AuthInput(label = "PASSWORD", value = "••••••••", modifier = Modifier.padding(top = 18.dp))
+        Text(
+            text = "Forgot password?",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.End,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        )
+        Spacer(modifier = Modifier.height(28.dp))
+        PrimaryAction(text = "SIGN IN", onClick = onSignIn)
+        Spacer(modifier = Modifier.weight(1f))
+        AuthInlineLink(
+            text = "Don't have an account? ",
+            action = "Sign up",
+            onClick = onSignUp,
+        )
+    }
+}
+
+@Composable
+private fun SignUpScreen(
+    onBack: () -> Unit,
+    onCreateAccount: () -> Unit,
+    onSignIn: () -> Unit,
+) {
+    AuthScreenFrame {
+        BackCircleButton(onClick = onBack)
+        Spacer(modifier = Modifier.height(28.dp))
+        AuthBrandLabel()
+        Text(
+            text = "Create account",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+        )
+        Text(
+            text = "Start your recovery journey today.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 28.dp),
+        )
+        GoogleAuthButton(text = "Sign up with Google", onClick = onCreateAccount)
+        AuthDivider()
+        AuthInput(label = "FULL NAME", value = "Alex Rivera")
+        AuthInput(label = "EMAIL", value = "you@example.com", modifier = Modifier.padding(top = 18.dp))
+        AuthInput(label = "PASSWORD", value = "••••••••", helper = "Minimum 8 characters", modifier = Modifier.padding(top = 18.dp))
+        Spacer(modifier = Modifier.height(28.dp))
+        PrimaryAction(text = "CREATE ACCOUNT", onClick = onCreateAccount)
+        Text(
+            text = "By continuing you agree to our Terms of Service and Privacy Policy.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.54f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 18.dp),
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        AuthInlineLink(
+            text = "Already have an account? ",
+            action = "Sign in",
+            onClick = onSignIn,
+        )
+    }
+}
+
+@Composable
+private fun AuthScreenFrame(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF3B130B),
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.background,
+                    ),
+                ),
+            )
+            .statusBarsPadding()
+            .padding(horizontal = 28.dp, vertical = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        content = content,
+    )
+}
+
+@Composable
+private fun AuthBrandLabel() {
+    Text(
+        text = "✦ HYBRIDTEMPO ✦",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 2.6.sp,
+    )
+}
+
+@Composable
+private fun BreathHeroMark() {
+    Box(modifier = Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val orange = Color(0xFFEB470A)
+            drawCircle(orange.copy(alpha = 0.22f), radius = size.minDimension * 0.48f, style = Stroke(width = 2.dp.toPx()))
+            drawCircle(orange.copy(alpha = 0.34f), radius = size.minDimension * 0.34f, style = Stroke(width = 2.dp.toPx()))
+            drawCircle(orange.copy(alpha = 0.86f), radius = size.minDimension * 0.18f)
+        }
+        Text(
+            text = "BREATHE",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
+
+@Composable
+private fun BackCircleButton(onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier.size(42.dp),
+            shape = CircleShape,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onBackground),
+        ) {
+            Text("‹", fontSize = 26.sp)
+        }
+    }
+}
+
+@Composable
+private fun GoogleAuthButton(text: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        shape = RoundedCornerShape(99.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF111111)),
+    ) {
+        Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Black, modifier = Modifier.padding(end = 10.dp))
+        Text(text, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun AuthGhostButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        shape = RoundedCornerShape(99.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onBackground),
+    ) {
+        Text(text)
+    }
+}
+
+@Composable
+private fun AuthDivider() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 28.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .height(1.dp)
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        )
+        Text(
+            text = "or continue with email",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+        Box(
+            modifier = Modifier
+                .height(1.dp)
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        )
+    }
+}
+
+@Composable
+private fun AuthInput(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    helper: String? = null,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.3.sp,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        )
+        helper?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AuthInlineLink(
+    text: String,
+    action: String,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick) {
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(action, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
     }
 }
 
