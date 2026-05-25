@@ -193,6 +193,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         state = uiState.draft,
                         onSettings = { showSettings = true },
                         onStateChange = viewModel::updateDraft,
+                        onHome = { screen = AppScreen.Home },
                         onRecommend = {
                             viewModel.requestRecommendationAndSaveCheckIn()
                             screen = AppScreen.Recommendation
@@ -875,6 +876,7 @@ private fun CheckInScreen(
     state: CheckInDraft,
     onSettings: () -> Unit,
     onStateChange: (CheckInDraft) -> Unit,
+    onHome: () -> Unit,
     onRecommend: () -> Unit,
 ) {
     ScreenFrame {
@@ -903,6 +905,14 @@ private fun CheckInScreen(
         )
         Spacer(modifier = Modifier.height(30.dp))
         PrimaryAction(text = "Get recommendation", onClick = onRecommend)
+        OutlinedButton(
+            onClick = onHome,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        ) {
+            Text("Back to readiness")
+        }
     }
 }
 
