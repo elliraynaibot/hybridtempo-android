@@ -8,6 +8,7 @@ import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
 import com.hybridtempo.android.data.FirebaseHybridTempoRepository
+import com.hybridtempo.android.domain.model.ImportedWorkout
 import com.hybridtempo.android.health.HealthConnectAvailability
 import com.hybridtempo.android.health.HealthConnectManager
 import com.hybridtempo.android.health.HealthConnectUiStatus
@@ -31,10 +32,16 @@ data class CheckInDraft(
     val energy: Int = 6,
     val soreness: Int = 4,
     val stress: Int = 5,
-    val workoutType: String = "Hybrid",
+    val workoutType: String = "Strength",
+    val workoutFormat: String = "AMRAP",
+    val breathingProblem: String = "I start too fast",
     val workoutIntensity: Int = 7,
     val timeAvailable: Int = 5,
-    val sessionIntent: String = "post_workout",
+    val sessionIntent: String = "between_sets",
+    val setCount: Int = 4,
+    val repsPerSet: Int = 5,
+    val intervalCount: Int = 6,
+    val intervalMinutes: Int = 2,
 )
 
 data class AthleteProfileDraft(
@@ -61,8 +68,14 @@ data class HybridTempoUiState(
     val recommendationQuota: RecommendationQuota? = null,
     val recommendationNotice: String? = null,
     val isRefreshingRecommendation: Boolean = false,
+    val reflectionDraft: SessionReflectionDraft = SessionReflectionDraft(
+        perceivedControl = 7,
+        perceivedRecovery = 7,
+    ),
+    val workoutReviewDraft: WorkoutReviewDraft = WorkoutReviewDraft(),
     val recentSessions: List<BreathworkSession> = emptyList(),
     val recentCheckIns: List<DailyCheckIn> = emptyList(),
+    val recentImportedWorkouts: List<ImportedWorkout> = emptyList(),
     val healthConnectStatus: HealthConnectUiStatus = HealthConnectUiStatus(),
     val saveMessage: String = "Firebase persistence is ready when app/google-services.json is added.",
     val isSaving: Boolean = false,
@@ -136,6 +149,10 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         refreshHealthConnectStatus()
     }
 
+    fun refreshHealthConnectData() {
+        refreshHealthConnectStatus()
+    }
+
     fun saveProfile() {
         val profileDraft = _uiState.value.profileDraft
         viewModelScope.launch {
@@ -169,6 +186,16 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update {
             it.copy(
                 draft = draft,
+            )
+        }
+        refreshPreviewRecommendation()
+    }
+
+    fun useImportedWorkout(workout: ImportedWorkout) {
+        _uiState.update {
+            it.copy(
+                draft = workout.toCheckInDraft(it.draft),
+                saveMessage = "Imported workout from ${workout.source}.",
             )
         }
         refreshPreviewRecommendation()
@@ -209,13 +236,36 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun updateReflectionDraft(draft: SessionReflectionDraft) {
+        _uiState.update { it.copy(reflectionDraft = draft) }
+    }
+
+    fun updateWorkoutReviewDraft(draft: WorkoutReviewDraft) {
+        _uiState.update { it.copy(workoutReviewDraft = draft) }
+    }
+
+    fun completeWorkoutReview() {
+        _uiState.update {
+            it.copy(
+                workoutReviewDraft = WorkoutReviewDraft(),
+                saveMessage = "Workout review captured for today's cue.",
+            )
+        }
+    }
+
     fun completeCurrentSession() {
         val recommendation = _uiState.value.recommendation
+        val reflection = _uiState.value.reflectionDraft
         val session = BreathworkSession(
             protocol = recommendation.protocol,
             durationMinutes = recommendation.durationMinutes,
             cadence = recommendation.cadence,
             completed = true,
+            breathSkillId = recommendation.breathSkillId,
+            perceivedControl = reflection.perceivedControl,
+            perceivedRecovery = reflection.perceivedRecovery,
+            reflectionFeeling = reflection.feeling.value,
+            reflectionNotes = reflection.notes.trim(),
         )
 
         viewModelScope.launch {
@@ -231,6 +281,10 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                 it.copy(
                     isSaving = false,
                     saveMessage = result.message,
+                    reflectionDraft = SessionReflectionDraft(
+                        perceivedControl = 7,
+                        perceivedRecovery = 7,
+                    ),
                 )
             }
         }
@@ -290,6 +344,11 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
             } else {
                 null
             }
+            val recentImportedWorkouts = if (enabled) {
+                runCatching { healthConnectManager.readRecentWorkouts(grantedPermissions) }.getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
             val message = when {
                 availability == HealthConnectAvailability.Unavailable -> "Health Connect is unavailable on this device. Manual check-ins still work."
                 availability == HealthConnectAvailability.UpdateRequired -> "Install or update Health Connect to use wearable recovery signals."
@@ -308,6 +367,7 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                         metrics = metrics,
                         message = message,
                     ),
+                    recentImportedWorkouts = recentImportedWorkouts,
                 )
             }
             refreshPreviewRecommendation()

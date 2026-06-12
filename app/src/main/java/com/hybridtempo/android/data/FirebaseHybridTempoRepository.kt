@@ -131,6 +131,11 @@ class FirebaseHybridTempoRepository(
                     cadence = document.getString("cadence").orEmpty(),
                     completed = document.getBoolean("completed") ?: false,
                     completedAt = document.getString("completedAt").orEmpty(),
+                    breathSkillId = document.getString("breathSkillId").orEmpty(),
+                    perceivedControl = document.getLong("perceivedControl")?.toInt() ?: 0,
+                    perceivedRecovery = document.getLong("perceivedRecovery")?.toInt() ?: 0,
+                    reflectionFeeling = document.getString("reflectionFeeling").orEmpty(),
+                    reflectionNotes = document.getString("reflectionNotes").orEmpty(),
                 )
             }
     }
@@ -192,6 +197,10 @@ private fun BreathworkRecommendation.toFirestoreMap(): Map<String, Any> = mapOf(
     "durationMinutes" to durationMinutes,
     "rationale" to rationale,
     "cadence" to cadence,
+    "breathSkillId" to breathSkillId,
+    "trainingCue" to trainingCue,
+    "measurementFocus" to measurementFocus,
+    "fallbackReason" to fallbackReason,
     "breathworkProtocol" to breathworkProtocol.toFirestoreMap(),
 )
 
@@ -202,6 +211,11 @@ private fun BreathworkSession.toFirestoreMap(): Map<String, Any> = mapOf(
     "cadence" to cadence,
     "completed" to completed,
     "completedAt" to completedAt,
+    "breathSkillId" to breathSkillId,
+    "perceivedControl" to perceivedControl,
+    "perceivedRecovery" to perceivedRecovery,
+    "reflectionFeeling" to reflectionFeeling,
+    "reflectionNotes" to reflectionNotes,
 )
 
 private fun Any?.asStringList(): List<String> = (this as? List<*>)

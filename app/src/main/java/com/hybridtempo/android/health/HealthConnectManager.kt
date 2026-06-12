@@ -10,6 +10,8 @@ import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.hybridtempo.android.domain.model.ImportedWorkout
+import com.hybridtempo.android.domain.model.WorkoutType
 import com.hybridtempo.android.readiness.HealthMetricsSnapshot
 import java.time.Duration
 import java.time.Instant
@@ -73,6 +75,15 @@ class HealthConnectManager(private val context: Context) {
         return snapshot.takeIf { it.hasData }
     }
 
+    suspend fun readRecentWorkouts(grantedPermissions: Set<String>? = null): List<ImportedWorkout> {
+        if (availability() != HealthConnectAvailability.Available) return emptyList()
+        val permissions = grantedPermissions ?: grantedPermissions()
+        if (EXERCISE_PERMISSION !in permissions) return emptyList()
+
+        val now = Instant.now()
+        return readRecentExerciseSessions(client(), now)
+    }
+
     private suspend fun readSleepMinutes(
         client: HealthConnectClient,
         now: Instant,
@@ -98,6 +109,29 @@ class HealthConnectManager(private val context: Context) {
             ),
         ).records.size
     }.getOrNull()
+
+    private suspend fun readRecentExerciseSessions(
+        client: HealthConnectClient,
+        now: Instant,
+    ): List<ImportedWorkout> = runCatching {
+        client.readRecords(
+            ReadRecordsRequest(
+                recordType = ExerciseSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(now.minus(Duration.ofDays(2)), now),
+            ),
+        ).records
+            .sortedByDescending { it.endTime }
+            .take(3)
+            .map { record ->
+                ImportedWorkout(
+                    id = record.metadata.id.ifBlank { "${record.startTime}-${record.endTime}-${record.exerciseType}" },
+                    source = record.metadata.dataOrigin.packageName.toHealthSourceLabel(),
+                    workoutType = record.exerciseType.toWorkoutType(),
+                    startedAt = record.startTime,
+                    endedAt = record.endTime,
+                )
+            }
+    }.getOrDefault(emptyList())
 
     private suspend fun readRestingHeartRate(
         client: HealthConnectClient,
@@ -129,4 +163,29 @@ class HealthConnectManager(private val context: Context) {
         fun permissionsContract(): ActivityResultContract<Set<String>, Set<String>> =
             PermissionController.createRequestPermissionResultContract()
     }
+}
+
+private fun String.toHealthSourceLabel(): String = when {
+    contains("fitbit", ignoreCase = true) -> "Google Health"
+    contains("google", ignoreCase = true) -> "Google Health"
+    contains("samsung", ignoreCase = true) -> "Samsung Health"
+    contains("strava", ignoreCase = true) -> "Strava"
+    else -> "Health Connect"
+}
+
+private fun Int.toWorkoutType(): WorkoutType = when (this) {
+    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> WorkoutType.RUNNING
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> WorkoutType.CYCLING
+    ExerciseSessionRecord.EXERCISE_TYPE_ROWING,
+    ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> WorkoutType.ROWING
+    ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> WorkoutType.INTERVALS
+    ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS,
+    ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+    ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> WorkoutType.STRENGTH
+    ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
+    ExerciseSessionRecord.EXERCISE_TYPE_PILATES,
+    ExerciseSessionRecord.EXERCISE_TYPE_STRETCHING -> WorkoutType.MOBILITY_RECOVERY
+    ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> WorkoutType.EASY_RECOVERY
+    else -> WorkoutType.CONDITIONING
 }

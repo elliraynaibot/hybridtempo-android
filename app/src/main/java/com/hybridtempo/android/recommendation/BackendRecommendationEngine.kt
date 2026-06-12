@@ -97,6 +97,10 @@ private fun Any?.asRecommendation(): BreathworkRecommendation {
         rationale = map["rationale"].asString().ifBlank { "A recovery-focused protocol was selected for your current state." },
         cadence = map["cadence"].asString().ifBlank { "4 second inhale · 5 second exhale" },
         breathworkProtocol = map["breathworkProtocol"].asProtocol(duration, protocol),
+        breathSkillId = map["breathSkillId"].asString(),
+        trainingCue = map["trainingCue"].asString(),
+        measurementFocus = map["measurementFocus"].asString(),
+        fallbackReason = map["fallbackReason"].asString(),
     )
 }
 

@@ -37,6 +37,10 @@ data class BreathworkRecommendation(
     val rationale: String = "A steady recovery protocol fits the current training context.",
     val cadence: String = "4 second inhale · 5 second exhale",
     val breathworkProtocol: BreathworkProtocol = BreathworkProtocol.postTrainingRecovery(durationMinutes = 5),
+    val breathSkillId: String = "",
+    val trainingCue: String = "",
+    val measurementFocus: String = "",
+    val fallbackReason: String = "",
 )
 
 data class BreathworkProtocol(
@@ -120,6 +124,11 @@ data class BreathworkSession(
     val cadence: String,
     val completed: Boolean,
     val completedAt: String = Instant.now().toString(),
+    val breathSkillId: String = "",
+    val perceivedControl: Int = 0,
+    val perceivedRecovery: Int = 0,
+    val reflectionFeeling: String = "",
+    val reflectionNotes: String = "",
 )
 
 data class SaveResult(

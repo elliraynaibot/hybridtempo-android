@@ -11,6 +11,8 @@ lifecycle = "2.10.0"
 media3 = "1.10.0"
 junit = "4.13.2"
 healthConnect = "1.2.0-alpha04"
+room = "2.7.2"
+datastore = "1.1.7"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -31,6 +33,9 @@ kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-cor
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 junit = { module = "junit:junit", version.ref = "junit" }
 androidx-health-connect = { module = "androidx.health.connect:connect-client", version.ref = "healthConnect" }
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
