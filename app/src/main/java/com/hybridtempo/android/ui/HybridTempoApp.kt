@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,6 +68,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,10 +87,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.ContextCompat
 import com.hybridtempo.android.audio.GuidedAudioController
+import com.hybridtempo.android.audio.BreathRhythmAnalyzer
+import com.hybridtempo.android.audio.BreathRhythmCheckResult
+import com.hybridtempo.android.audio.BreathRhythmRecorder
+import com.hybridtempo.android.audio.toSummaryLabel
 import com.hybridtempo.android.data.BreathworkRecommendation
 import com.hybridtempo.android.data.BreathworkSession
 import com.hybridtempo.android.data.DailyCheckIn
@@ -95,7 +103,6 @@ import com.hybridtempo.android.domain.model.ImportedWorkout
 import com.hybridtempo.android.health.HealthConnectAvailability
 import com.hybridtempo.android.health.HealthConnectManager
 import com.hybridtempo.android.health.HealthConnectUiStatus
-import com.hybridtempo.android.health.HeartRateLock
 import com.hybridtempo.android.readiness.RaceCountdown
 import com.hybridtempo.android.readiness.RaceCountdownCalculator
 import com.hybridtempo.android.readiness.ManualDetailsPrompt
@@ -128,7 +135,9 @@ private enum class AppScreen {
     TodayCue,
     WorkoutReview,
     GuideMode,
+    PreWorkoutBreathCheck,
     Session,
+    PostWorkoutBreathCheck,
     WorkoutHandoff,
     History,
 }
@@ -159,6 +168,8 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
     var selectedGuideMode by remember { mutableStateOf(defaultGuideModes().first { it.value == "between_sets" }) }
     var selectedGuidedSession by remember { mutableStateOf(arriveOrganizeGuidedSession()) }
     var guideModeBackTarget by remember { mutableStateOf(AppScreen.Home) }
+    var pendingSessionStartedAt by remember { mutableStateOf<Instant?>(null) }
+    var pendingSessionEndedAt by remember { mutableStateOf<Instant?>(null) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val healthConnectLauncher = rememberLauncherForActivityResult(
         contract = HealthConnectManager.permissionsContract(),
@@ -249,6 +260,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     AppScreen.Home -> HomeScreen(
                         recentSessions = uiState.recentSessions,
                         onSelectMoment = { sessionIntent ->
+                            viewModel.clearBreathChecks()
                             viewModel.updateDraft(uiState.draft.forGuidedMoment(sessionIntent))
                             selectedGuideMode = guideModeForSessionIntent(sessionIntent)
                             selectedGuidedSession = selectGuidedSessionForIntent(sessionIntent)
@@ -285,7 +297,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         onBack = { screen = AppScreen.BreathingProblem },
                         onPractice = {
                             selectedGuidedSession = selectGuidedSessionForIntent(uiState.draft.sessionIntent)
-                            screen = AppScreen.Session
+                            screen = AppScreen.PreWorkoutBreathCheck
                         },
                         onReview = { screen = AppScreen.WorkoutReview },
                         onEdit = { screen = AppScreen.WorkoutFormat },
@@ -295,8 +307,11 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         draft = uiState.workoutReviewDraft,
                         cue = uiState.draft.toTodayCuePresentation(),
                         healthConnectStatus = uiState.healthConnectStatus,
+                        beforeBreathCheck = uiState.preWorkoutBreathCheck,
+                        afterBreathCheck = uiState.postWorkoutBreathCheck,
                         onSettings = { showSettings = true },
                         onDraftChange = viewModel::updateWorkoutReviewDraft,
+                        onAfterBreathCheck = viewModel::setPostWorkoutBreathCheck,
                         onBack = { screen = AppScreen.TodayCue },
                         onComplete = {
                             viewModel.completeWorkoutReview()
@@ -316,20 +331,47 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         onBack = { screen = guideModeBackTarget },
                     )
 
+                    AppScreen.PreWorkoutBreathCheck -> BreathRhythmCheckScreen(
+                        momentTitle = "Before you start",
+                        title = "Set your\nbaseline",
+                        body = "Optional 20-second breath check. Hold the phone near your face, breathe normally, and keep the room as quiet as possible.",
+                        result = uiState.preWorkoutBreathCheck,
+                        primaryAction = "START SESSION",
+                        skipAction = "Skip and start",
+                        onResult = viewModel::setPreWorkoutBreathCheck,
+                        onSettings = { showSettings = true },
+                        onBack = { screen = AppScreen.TodayCue },
+                        onContinue = { screen = AppScreen.Session },
+                    )
+
                     AppScreen.Session -> SessionScreen(
                         recommendation = uiState.recommendation,
                         guideMode = selectedGuideMode,
                         guidedSession = selectedGuidedSession,
-                        preSessionHeartRateLock = uiState.preSessionHeartRateLock,
-                        isLockingHeartRate = uiState.isLockingHeartRate,
-                        heartRateLockMessage = uiState.heartRateLockMessage,
                         onSettings = { showSettings = true },
-                        onBack = { screen = AppScreen.TodayCue },
-                        onSessionStarted = viewModel::lockPreSessionHeartRate,
+                        onBack = { screen = AppScreen.PreWorkoutBreathCheck },
                         onFinish = { sessionStartedAt, sessionEndedAt ->
+                            pendingSessionStartedAt = sessionStartedAt
+                            pendingSessionEndedAt = sessionEndedAt
+                            screen = AppScreen.PostWorkoutBreathCheck
+                        },
+                    )
+
+                    AppScreen.PostWorkoutBreathCheck -> BreathRhythmCheckScreen(
+                        momentTitle = "After the work",
+                        title = "Check your\nrhythm again",
+                        body = "Optional 20-second after-check. Use the same phone position so the comparison is about control, not setup.",
+                        result = uiState.postWorkoutBreathCheck,
+                        beforeResult = uiState.preWorkoutBreathCheck,
+                        primaryAction = "SAVE SESSION",
+                        skipAction = "Skip and save",
+                        onResult = viewModel::setPostWorkoutBreathCheck,
+                        onSettings = { showSettings = true },
+                        onBack = { screen = AppScreen.Session },
+                        onContinue = {
                             viewModel.completeCurrentSession(
-                                sessionStartedAt = sessionStartedAt,
-                                sessionEndedAt = sessionEndedAt,
+                                sessionStartedAt = pendingSessionStartedAt ?: Instant.now(),
+                                sessionEndedAt = pendingSessionEndedAt ?: Instant.now(),
                             )
                             screen = AppScreen.WorkoutHandoff
                         },
@@ -337,7 +379,6 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
 
                     AppScreen.WorkoutHandoff -> WorkoutHandoffScreen(
                         cue = uiState.draft.toTodayCuePresentation(),
-                        healthConnectStatus = uiState.healthConnectStatus,
                         completedSession = uiState.lastCompletedSession,
                         onSettings = { showSettings = true },
                         onHome = { screen = AppScreen.Home },
@@ -1509,7 +1550,11 @@ private fun SettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp, vertical = 14.dp),
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp)
+                .padding(top = 14.dp, bottom = 34.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Eyebrow("Profile")
@@ -1590,7 +1635,6 @@ private fun SettingsSheet(
             )
             Spacer(modifier = Modifier.height(18.dp))
             PrimaryAction(text = "SAVE CHANGES", onClick = onSave)
-            Spacer(modifier = Modifier.height(22.dp))
         }
     }
 }
@@ -2125,9 +2169,22 @@ private fun HealthConnectCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
             )
+            Text(
+                text = presentation.dataDiagnostic,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (status.metrics?.hasData == true) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                fontWeight = if (status.metrics?.hasData == true) FontWeight.Bold else FontWeight.Normal,
+                modifier = Modifier.padding(top = 12.dp),
+            )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(top = 14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
             ) {
                 OutlinedButton(
                     onClick = onConnect,
@@ -2936,8 +2993,11 @@ private fun WorkoutReviewScreen(
     draft: WorkoutReviewDraft,
     cue: TodayCuePresentation,
     healthConnectStatus: HealthConnectUiStatus,
+    beforeBreathCheck: BreathRhythmCheckResult?,
+    afterBreathCheck: BreathRhythmCheckResult?,
     onSettings: () -> Unit,
     onDraftChange: (WorkoutReviewDraft) -> Unit,
+    onAfterBreathCheck: (BreathRhythmCheckResult?) -> Unit,
     onBack: () -> Unit,
     onComplete: () -> Unit,
 ) {
@@ -2968,6 +3028,19 @@ private fun WorkoutReviewScreen(
         HealthConnectInsightCard(
             status = healthConnectStatus,
             onAction = onSettings,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        BreathRhythmRecorderCard(
+            result = afterBreathCheck,
+            onResult = onAfterBreathCheck,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        InsightCard(
+            title = "Before / after",
+            body = BreathRhythmAnalyzer.compare(
+                before = beforeBreathCheck,
+                after = afterBreathCheck,
+            ),
             modifier = Modifier.padding(top = 14.dp),
         )
         DotRatingRow(
@@ -3351,23 +3424,22 @@ private fun SessionScreen(
     recommendation: BreathworkRecommendation,
     guideMode: GuideModePresentation,
     guidedSession: GuidedBreathworkSession,
-    preSessionHeartRateLock: HeartRateLock?,
-    isLockingHeartRate: Boolean,
-    heartRateLockMessage: String?,
     onSettings: () -> Unit,
     onBack: () -> Unit,
-    onSessionStarted: (Instant) -> Unit,
     onFinish: (Instant, Instant) -> Unit,
 ) {
     val context = LocalContext.current
     val sessionStartedAt = remember(guidedSession.id) { Instant.now() }
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(true) }
-    var guidedAudioEnabled by remember { mutableStateOf(true) }
-    val guidedAudioController = remember(guidedSession.audioTrackName) {
+    var guidedNarrationEnabled by remember { mutableStateOf(true) }
+    val activeAudioTrackName = guidedSession.audioTrackNameFor(
+        guidedNarrationEnabled = guidedNarrationEnabled,
+    )
+    val guidedAudioController = remember(activeAudioTrackName) {
         GuidedAudioController(
             context = context.applicationContext,
-            trackName = guidedSession.audioTrackName,
+            trackName = activeAudioTrackName,
         )
     }
 
@@ -3378,12 +3450,11 @@ private fun SessionScreen(
         }
     }
 
-    LaunchedEffect(guidedSession.id, sessionStartedAt) {
-        onSessionStarted(sessionStartedAt)
-    }
-
-    LaunchedEffect(running, guidedAudioEnabled, guidedSession.audioTrackName) {
-        guidedAudioController.setPlaying(running && guidedAudioEnabled)
+    LaunchedEffect(running, activeAudioTrackName) {
+        guidedAudioController.syncTo(
+            elapsedSeconds = elapsedSeconds,
+            playing = running,
+        )
     }
 
     androidx.compose.runtime.DisposableEffect(guidedAudioController) {
@@ -3413,10 +3484,9 @@ private fun SessionScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp),
         )
-        HeartRateLockCard(
-            lock = preSessionHeartRateLock,
-            isLoading = isLockingHeartRate,
-            message = heartRateLockMessage,
+        InsightCard(
+            title = "Mental model",
+            body = "${guideMode.windowTitle}: ${recommendation.trainingCue.ifBlank { guidedSession.intention }}",
             modifier = Modifier.padding(top = 18.dp),
         )
         Spacer(modifier = Modifier.height(34.dp))
@@ -3444,8 +3514,8 @@ private fun SessionScreen(
                 modifier = Modifier.padding(end = 12.dp),
             )
             Switch(
-                checked = guidedAudioEnabled,
-                onCheckedChange = { guidedAudioEnabled = it },
+                checked = guidedNarrationEnabled,
+                onCheckedChange = { guidedNarrationEnabled = it },
             )
         }
         Spacer(modifier = Modifier.height(46.dp))
@@ -3477,29 +3547,330 @@ private fun SessionScreen(
 }
 
 @Composable
-private fun HeartRateLockCard(
-    lock: HeartRateLock?,
-    isLoading: Boolean,
-    message: String?,
+private fun BreathRhythmCheckScreen(
+    momentTitle: String,
+    title: String,
+    body: String,
+    result: BreathRhythmCheckResult?,
+    primaryAction: String,
+    skipAction: String,
+    onResult: (BreathRhythmCheckResult?) -> Unit,
+    onSettings: () -> Unit,
+    onBack: () -> Unit,
+    onContinue: () -> Unit,
+    modifier: Modifier = Modifier,
+    beforeResult: BreathRhythmCheckResult? = null,
+) {
+    val presentation = remember { BreathRhythmCheckPresentation() }
+
+    ScreenFrame(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        onSwipeBack = onBack,
+        modifier = modifier,
+    ) {
+        ScreenHeader(
+            eyebrow = momentTitle,
+            title = title,
+            onSettings = onSettings,
+        )
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+            Text("Back")
+        }
+        InsightCard(
+            title = "How this works",
+            body = body,
+            modifier = Modifier.padding(top = 18.dp),
+        )
+        InsightCard(
+            title = "Privacy",
+            body = presentation.privacy,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        InsightCard(
+            title = "Important limitations",
+            body = presentation.limitations,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        BreathRhythmRecorderCard(
+            result = result,
+            onResult = onResult,
+            modifier = Modifier.padding(top = 22.dp),
+        )
+        if (beforeResult != null || result != null) {
+            InsightCard(
+                title = "Comparison",
+                body = BreathRhythmAnalyzer.compare(
+                    before = beforeResult,
+                    after = result,
+                ),
+                modifier = Modifier.padding(top = 14.dp),
+            )
+        }
+        Spacer(modifier = Modifier.height(42.dp))
+        PrimaryAction(text = primaryAction, onClick = onContinue)
+        TextButton(
+            onClick = {
+                if (result == null) onResult(null)
+                onContinue()
+            },
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Text(skipAction)
+        }
+    }
+}
+
+@Composable
+private fun BreathRhythmRecorderCard(
+    result: BreathRhythmCheckResult?,
+    onResult: (BreathRhythmCheckResult?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val body = when {
-        isLoading -> "Checking Health Connect for a recent HR sample..."
-        lock != null -> lock.summary
-        else -> message ?: "Starting HR will be estimated if Health Connect has a recent sample."
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val presentation = remember { BreathRhythmCheckPresentation() }
+    var isRecording by remember { mutableStateOf(false) }
+    var remainingSeconds by remember { mutableIntStateOf(BreathRhythmRecorder.DEFAULT_DURATION_SECONDS) }
+    var message by remember {
+        mutableStateOf("Place the phone near your face. Breathe normally for ${BreathRhythmRecorder.DEFAULT_DURATION_SECONDS} seconds.")
+    }
+    val recorder = remember(context) { BreathRhythmRecorder(context.applicationContext) }
+    fun startRecording() {
+        scope.launch {
+            isRecording = true
+            remainingSeconds = BreathRhythmRecorder.DEFAULT_DURATION_SECONDS
+            message = "Recording rhythm... keep the phone steady and breathe normally."
+            val countdownJob = launch {
+                while (remainingSeconds > 0) {
+                    delay(1_000)
+                    remainingSeconds = (remainingSeconds - 1).coerceAtLeast(0)
+                }
+            }
+            val recordedResult = runCatching { recorder.record() }
+            countdownJob.cancel()
+            isRecording = false
+            remainingSeconds = BreathRhythmRecorder.DEFAULT_DURATION_SECONDS
+            recordedResult
+                .onSuccess {
+                    onResult(it)
+                    message = "Check complete. ${it.toSummaryLabel()}."
+                }
+                .onFailure {
+                    message = it.message ?: "Could not complete breath check. Try again in a quieter space."
+                }
+        }
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            startRecording()
+        } else {
+            message = "Microphone permission is needed for the optional breath check."
+        }
     }
 
-    InsightCard(
-        title = "Starting heart rate",
-        body = body,
-        modifier = modifier,
+    if (isRecording) {
+        BreathRhythmRecordingDialog(
+            presentation = presentation.recordingState(remainingSeconds),
+        )
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(30.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(30.dp),
+            )
+            .padding(18.dp),
+    ) {
+        Text(
+            text = "BREATH RHYTHM CHECK",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 1.6.sp,
+        )
+        Text(
+            text = result?.toSummaryLabel() ?: message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        OutlinedButton(
+            onClick = {
+                if (
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.RECORD_AUDIO,
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    startRecording()
+                } else {
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            enabled = !isRecording,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(62.dp)
+                .padding(top = 14.dp),
+            shape = RoundedCornerShape(99.dp),
+        ) {
+            Text(
+                text = if (isRecording) "Recording..." else if (result == null) "Record 20-sec check" else "Record again",
+                fontWeight = FontWeight.Black,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BreathRhythmRecordingDialog(
+    presentation: BreathRhythmRecordingPresentation,
+) {
+    Dialog(onDismissRequest = {}) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(36.dp))
+                .background(MaterialTheme.colorScheme.background)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(36.dp),
+                )
+                .padding(horizontal = 24.dp, vertical = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = presentation.title.uppercase(),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary,
+                letterSpacing = 1.8.sp,
+            )
+            BreathRhythmRecordingVisualizer(
+                modifier = Modifier.padding(top = 22.dp),
+            )
+            Text(
+                text = presentation.countdownLabel,
+                style = MaterialTheme.typography.displayLarge,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            Text(
+                text = "seconds left",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                letterSpacing = 1.2.sp,
+            )
+            Text(
+                text = presentation.instruction,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 18.dp),
+            )
+            Text(
+                text = presentation.privacyReminder,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun BreathRhythmRecordingVisualizer(
+    modifier: Modifier = Modifier,
+) {
+    val transition = rememberInfiniteTransition(label = "breath-recording")
+    val waveProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "breath-recording-wave",
     )
+    val pulse by transition.animateFloat(
+        initialValue = 0.86f,
+        targetValue = 1.14f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "breath-recording-pulse",
+    )
+    val color = MaterialTheme.colorScheme.primary
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(150.dp),
+    ) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val baseRadius = size.minDimension * 0.24f
+
+        listOf(0.58f, 0.82f, 1.06f).forEachIndexed { index, multiplier ->
+            drawCircle(
+                color = color.copy(alpha = 0.16f - (index * 0.035f)),
+                radius = baseRadius * multiplier * pulse,
+                center = center,
+                style = Stroke(width = (2.4f - (index * 0.35f)).dp.toPx()),
+            )
+        }
+
+        val path = Path()
+        val baseline = center.y
+        val amplitude = size.height * 0.13f
+        val wavelength = size.width * 0.62f
+        val phase = waveProgress * 2f * PI.toFloat()
+        val steps = 96
+
+        for (step in 0..steps) {
+            val x = size.width * (step / steps.toFloat())
+            val y = baseline + sin((x / wavelength * 2f * PI.toFloat()) + phase) * amplitude
+            if (step == 0) {
+                path.moveTo(x, y)
+            } else {
+                path.lineTo(x, y)
+            }
+        }
+
+        drawPath(
+            path = path,
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    color.copy(alpha = 0.1f),
+                    color.copy(alpha = 0.95f),
+                    color.copy(alpha = 0.1f),
+                ),
+            ),
+            style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
+        )
+
+        drawCircle(
+            color = color.copy(alpha = 0.92f),
+            radius = size.minDimension * 0.06f * pulse,
+            center = center,
+        )
+    }
 }
 
 @Composable
 private fun WorkoutHandoffScreen(
     cue: TodayCuePresentation,
-    healthConnectStatus: HealthConnectUiStatus,
     completedSession: BreathworkSession?,
     onSettings: () -> Unit,
     onHome: () -> Unit,
@@ -3535,14 +3906,8 @@ private fun WorkoutHandoffScreen(
             body = "${handoff.reviewInstruction}\n\n${handoff.reviewQuestion}",
             modifier = Modifier.padding(top = 14.dp),
         )
-        HealthConnectInsightCard(
-            status = healthConnectStatus,
-            onAction = onSettings,
-            modifier = Modifier.padding(top = 14.dp),
-        )
-        HeartRateResponseCard(
+        BreathRhythmResponseCard(
             session = completedSession,
-            healthConnectStatus = healthConnectStatus,
             modifier = Modifier.padding(top = 14.dp),
         )
         Spacer(modifier = Modifier.height(42.dp))
@@ -3561,23 +3926,14 @@ private fun WorkoutHandoffScreen(
 }
 
 @Composable
-private fun HeartRateResponseCard(
+private fun BreathRhythmResponseCard(
     session: BreathworkSession?,
-    healthConnectStatus: HealthConnectUiStatus,
     modifier: Modifier = Modifier,
 ) {
-    val body = when {
-        session?.heartRateBeforeBpm != null ->
-            session.toHistorySessionPresentation().heartRateSummary
-        healthConnectStatus.enabled ->
-            "No heart-rate samples were available around this breathwork session yet."
-        else ->
-            "Connect Health Connect from your profile to compare HR before and after a session."
-    }
-
     InsightCard(
-        title = "Heart-rate response",
-        body = body,
+        title = "Breath rhythm result",
+        body = session?.toHistorySessionPresentation()?.breathRhythmSummary
+            ?: "No breath rhythm check saved yet. You can still review the cue after training.",
         modifier = modifier,
     )
 }
@@ -4647,14 +5003,14 @@ private fun SessionRow(session: BreathworkSession) {
                 }
             }
             Text(
-                text = presentation.heartRateSummary,
+                text = presentation.breathRhythmSummary,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (session.heartRateDeltaBpm != null) {
+                color = if (session.breathRhythmImprovementPercent != null) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                fontWeight = if (session.heartRateDeltaBpm != null) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (session.breathRhythmImprovementPercent != null) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier.padding(top = 12.dp),
             )
         }

@@ -10,9 +10,19 @@ class GuidedBreathworkSessionTest {
 
         assertEquals("arrive_organize", session.id)
         assertEquals("Arrive & Organize", session.title)
-        assertEquals("arrive_organize_mixed", session.audioTrackName)
+        assertEquals("arrive_organize_audio_only", session.audioTrackName)
+        assertEquals("arrive_organize_audio_only", session.audioOnlyTrackName)
+        assertEquals("arrive_organize_mixed", session.guidedAudioTrackName)
         assertEquals(198, session.durationSeconds)
         assertEquals(7, session.segments.size)
+    }
+
+    @Test
+    fun `arrive organize switches audio track by narration mode`() {
+        val session = arriveOrganizeGuidedSession()
+
+        assertEquals("arrive_organize_mixed", session.audioTrackNameFor(guidedNarrationEnabled = true))
+        assertEquals("arrive_organize_audio_only", session.audioTrackNameFor(guidedNarrationEnabled = false))
     }
 
     @Test
@@ -35,9 +45,19 @@ class GuidedBreathworkSessionTest {
 
         assertEquals("brace_breathe", session.id)
         assertEquals("Brace & Breathe", session.title)
-        assertEquals("breathe_brace", session.audioTrackName)
+        assertEquals("breathe_brace_audio_only", session.audioTrackName)
+        assertEquals("breathe_brace_audio_only", session.audioOnlyTrackName)
+        assertEquals("breathe_brace", session.guidedAudioTrackName)
         assertEquals(279, session.durationSeconds)
         assertEquals(4, session.segments.size)
+    }
+
+    @Test
+    fun `brace breathe switches audio track by narration mode`() {
+        val session = braceBreatheGuidedSession()
+
+        assertEquals("breathe_brace", session.audioTrackNameFor(guidedNarrationEnabled = true))
+        assertEquals("breathe_brace_audio_only", session.audioTrackNameFor(guidedNarrationEnabled = false))
     }
 
     @Test
@@ -47,8 +67,18 @@ class GuidedBreathworkSessionTest {
         assertEquals("reset_after_session", session.id)
         assertEquals("Reset After the Session", session.title)
         assertEquals("reset_after_session_after_workout", session.audioTrackName)
+        assertEquals("reset_after_session_after_workout", session.audioOnlyTrackName)
+        assertEquals("reset_after_session_with_narration", session.guidedAudioTrackName)
         assertEquals(200, session.durationSeconds)
         assertEquals(4, session.segments.size)
+    }
+
+    @Test
+    fun `reset after session switches audio track by narration mode`() {
+        val session = resetAfterSessionGuidedSession()
+
+        assertEquals("reset_after_session_with_narration", session.audioTrackNameFor(guidedNarrationEnabled = true))
+        assertEquals("reset_after_session_after_workout", session.audioTrackNameFor(guidedNarrationEnabled = false))
     }
 
     @Test

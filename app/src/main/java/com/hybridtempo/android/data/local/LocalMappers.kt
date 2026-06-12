@@ -77,6 +77,9 @@ fun BreathworkSession.toLocalSessionEntity(): LocalSessionEntity = LocalSessionE
     heartRateBeforeBpm = heartRateBeforeBpm,
     heartRateAfterBpm = heartRateAfterBpm,
     heartRateDeltaBpm = heartRateDeltaBpm,
+    breathRhythmBeforePercent = breathRhythmBeforePercent,
+    breathRhythmAfterPercent = breathRhythmAfterPercent,
+    breathRhythmImprovementPercent = breathRhythmImprovementPercent,
 )
 
 fun LocalSessionEntity.toBreathworkSession(): BreathworkSession = BreathworkSession(
@@ -96,4 +99,7 @@ fun LocalSessionEntity.toBreathworkSession(): BreathworkSession = BreathworkSess
     heartRateBeforeBpm = heartRateBeforeBpm,
     heartRateAfterBpm = heartRateAfterBpm,
     heartRateDeltaBpm = heartRateDeltaBpm,
+    breathRhythmBeforePercent = breathRhythmBeforePercent,
+    breathRhythmAfterPercent = breathRhythmAfterPercent,
+    breathRhythmImprovementPercent = breathRhythmImprovementPercent,
 )

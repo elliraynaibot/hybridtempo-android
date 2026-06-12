@@ -42,7 +42,7 @@ class HistoryImpactPresentationTest {
         control: Int,
         recovery: Int,
     ): BreathworkSession = BreathworkSession(
-        protocol = "Cooldown HR Recovery",
+        protocol = "Cooldown Breath Recovery",
         durationMinutes = 5,
         cadence = "4 second inhale - 6 second exhale",
         completed = true,

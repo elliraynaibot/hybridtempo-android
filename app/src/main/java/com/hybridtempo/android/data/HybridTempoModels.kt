@@ -104,7 +104,7 @@ data class BreathworkProtocol(
             durationMinutes = durationMinutes,
             phases = listOf(
                 BreathPhase(label = "Inhale", seconds = 4, instruction = "Breathe into the low ribs", scaleTarget = 1.1f),
-                BreathPhase(label = "Exhale", seconds = 5, instruction = "Drop the heart rate down", scaleTarget = 0.74f),
+                BreathPhase(label = "Exhale", seconds = 5, instruction = "Let the breathing settle", scaleTarget = 0.74f),
             ),
         )
     }
@@ -134,6 +134,9 @@ data class BreathworkSession(
     val heartRateBeforeBpm: Int? = null,
     val heartRateAfterBpm: Int? = null,
     val heartRateDeltaBpm: Int? = null,
+    val breathRhythmBeforePercent: Int? = null,
+    val breathRhythmAfterPercent: Int? = null,
+    val breathRhythmImprovementPercent: Int? = null,
 )
 
 data class SaveResult(

@@ -5,11 +5,15 @@ data class GuidedBreathworkSession(
     val title: String,
     val intention: String,
     val category: String,
-    val audioTrackName: String,
+    val audioOnlyTrackName: String,
+    val guidedAudioTrackName: String = audioOnlyTrackName,
     val durationSeconds: Int,
     val visualizationStyle: BreathworkVisualizationStyle,
     val segments: List<GuidedBreathworkSegment>,
-)
+) {
+    val audioTrackName: String
+        get() = audioOnlyTrackName
+}
 
 enum class BreathworkVisualizationStyle {
     Gather,
@@ -34,12 +38,17 @@ fun GuidedBreathworkSession.segmentAt(elapsedSeconds: Int): GuidedBreathworkSegm
     } ?: segments.last()
 }
 
+fun GuidedBreathworkSession.audioTrackNameFor(guidedNarrationEnabled: Boolean): String {
+    return if (guidedNarrationEnabled) guidedAudioTrackName else audioOnlyTrackName
+}
+
 fun arriveOrganizeGuidedSession(): GuidedBreathworkSession = GuidedBreathworkSession(
     id = "arrive_organize",
     title = "Arrive & Organize",
     intention = "Shift from distracted or stressed into physically ready.",
     category = "pre_session",
-    audioTrackName = "arrive_organize_mixed",
+    audioOnlyTrackName = "arrive_organize_audio_only",
+    guidedAudioTrackName = "arrive_organize_mixed",
     durationSeconds = 198,
     visualizationStyle = BreathworkVisualizationStyle.Gather,
     segments = listOf(
@@ -106,7 +115,8 @@ fun braceBreatheGuidedSession(): GuidedBreathworkSession = GuidedBreathworkSessi
     title = "Brace & Breathe",
     intention = "Stay mechanically organized before hard work starts.",
     category = "pre_workout",
-    audioTrackName = "breathe_brace",
+    audioOnlyTrackName = "breathe_brace_audio_only",
+    guidedAudioTrackName = "breathe_brace",
     durationSeconds = 279,
     visualizationStyle = BreathworkVisualizationStyle.Brace,
     segments = listOf(
@@ -146,7 +156,8 @@ fun resetAfterSessionGuidedSession(): GuidedBreathworkSession = GuidedBreathwork
     title = "Reset After the Session",
     intention = "Downshift after training and reinforce recovery control.",
     category = "post_workout",
-    audioTrackName = "reset_after_session_after_workout",
+    audioOnlyTrackName = "reset_after_session_after_workout",
+    guidedAudioTrackName = "reset_after_session_with_narration",
     durationSeconds = 200,
     visualizationStyle = BreathworkVisualizationStyle.Reset,
     segments = listOf(
@@ -168,7 +179,7 @@ fun resetAfterSessionGuidedSession(): GuidedBreathworkSession = GuidedBreathwork
             startSeconds = 105,
             endSeconds = 165,
             title = "Recover control",
-            cue = "Settle heart rate and breathing together.",
+            cue = "Let breathing settle before you move on.",
             visualMode = "recovery_wave",
         ),
         GuidedBreathworkSegment(

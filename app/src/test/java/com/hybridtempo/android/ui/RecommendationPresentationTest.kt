@@ -9,19 +9,19 @@ class RecommendationPresentationTest {
     @Test
     fun `presentation exposes skill specific recommendation details`() {
         val presentation = BreathworkRecommendation(
-            protocol = "Cooldown HR Recovery",
+            protocol = "Cooldown Breath Recovery",
             durationMinutes = 5,
-            rationale = "Cooldown HR Recovery matches after training because your current check-in points to recovery.",
+            rationale = "Cooldown Breath Recovery matches after training because your current check-in points to recovery.",
             cadence = "4 second inhale - 6 second exhale",
             breathSkillId = "cooldown-hr-recovery",
             trainingCue = "Finish the workout by recovering, not rushing away.",
-            measurementFocus = "Measure two-minute heart-rate drop after comparable workouts.",
+            measurementFocus = "Compare breath rhythm before and after comparable workouts.",
         ).toRecommendationPresentation()
 
-        assertEquals("Cooldown HR Recovery", presentation.title)
+        assertEquals("Cooldown Breath Recovery", presentation.title)
         assertEquals("5 min - 4 second inhale - 6 second exhale", presentation.meta)
         assertEquals("Finish the workout by recovering, not rushing away.", presentation.trainingCue)
-        assertEquals("Measure two-minute heart-rate drop after comparable workouts.", presentation.measurementFocus)
+        assertEquals("Compare breath rhythm before and after comparable workouts.", presentation.measurementFocus)
         assertTrue(presentation.badge.contains("Skill"))
     }
 

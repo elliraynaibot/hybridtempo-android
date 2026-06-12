@@ -47,9 +47,3 @@ data class ImportedWorkout(
     val endedAt: Instant,
     val intensity: TrainingIntensity? = null,
 )
-
-data class HeartRateSample(
-    val workoutId: String,
-    val measuredAt: Instant,
-    val beatsPerMinute: Int,
-)

@@ -28,7 +28,7 @@ class PermissionsRationaleActivity : ComponentActivity() {
                             style = MaterialTheme.typography.headlineMedium,
                         )
                         Text(
-                            text = "HybridTempo uses optional Health Connect data, such as sleep, workouts, and resting heart rate, to improve recovery readiness recommendations. The app does not require Health Connect, and you can revoke access in Android settings at any time.",
+                            text = "HybridTempo uses optional Health Connect data, such as sleep and completed workouts, to improve recovery context. The app does not require Health Connect, and you can revoke access in Android settings at any time.",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(top = 16.dp),
                         )

@@ -24,7 +24,7 @@ object BreathSkillSeed {
                 "Repeat until the first few minutes feel controlled.",
             ),
             trainingCue = "First five minutes smooth, not explosive.",
-            measurementFocus = "Compare early heart-rate rise with similar workouts.",
+            measurementFocus = "Compare baseline rhythm and first-block breath control.",
             bestForWorkoutTypes = setOf(
                 WorkoutType.INTERVALS,
                 WorkoutType.TEMPO_THRESHOLD,
@@ -46,7 +46,7 @@ object BreathSkillSeed {
                 "Let the next rep start from control, not panic.",
             ),
             trainingCue = "Use the first recovery breaths before checking pace or splits.",
-            measurementFocus = "Track how fast heart rate settles between repeated efforts.",
+            measurementFocus = "Track how quickly breathing feels controlled between efforts.",
             bestForWorkoutTypes = setOf(
                 WorkoutType.INTERVALS,
                 WorkoutType.CONDITIONING,
@@ -68,7 +68,7 @@ object BreathSkillSeed {
                 "Let each round feel quieter than the last.",
             ),
             trainingCue = "Do this before opening messages or leaving the gym.",
-            measurementFocus = "Measure two-minute heart-rate drop and post-session calm.",
+            measurementFocus = "Compare after-workout rhythm and post-session calm.",
             bestForWorkoutTypes = setOf(
                 WorkoutType.CONDITIONING,
                 WorkoutType.INTERVALS,
@@ -112,7 +112,7 @@ object BreathSkillSeed {
                 "Return attention to the next repeatable action.",
             ),
             trainingCue = "Relax face, hands, then pace.",
-            measurementFocus = "Capture perceived control and late-session heart-rate drift.",
+            measurementFocus = "Capture perceived control and late-session breathing drift.",
             bestForWorkoutTypes = setOf(
                 WorkoutType.LONG_ENDURANCE,
                 WorkoutType.RACE_EVENT,
@@ -315,19 +315,19 @@ object BreathSkillSeed {
         ),
         skill(
             id = "cooldown-hr-recovery",
-            title = "Cooldown HR Recovery",
+            title = "Cooldown Breath Recovery",
             category = BreathSkillCategory.AFTER_TRAINING,
             difficulty = BreathSkillDifficulty.BASIC,
-            athleteProblem = "Heart rate stays elevated after the work is done.",
-            goal = "Support a smoother cooldown and review heart-rate recovery.",
+            athleteProblem = "Breathing stays rushed after the work is done.",
+            goal = "Support a smoother cooldown and review breath rhythm recovery.",
             instructions = listOf(
                 "Start immediately after easy cooldown movement.",
                 "Sit or stand quietly.",
                 "Breathe in for 4 counts and out for 6 counts.",
-                "Let the app compare this cooldown with similar sessions.",
+                "Use a breath check after training to compare rhythm with your baseline.",
             ),
             trainingCue = "Finish the workout by recovering, not rushing away.",
-            measurementFocus = "Measure two-minute heart-rate drop after comparable workouts.",
+            measurementFocus = "Compare breath rhythm before and after comparable workouts.",
             bestForWorkoutTypes = setOf(
                 WorkoutType.INTERVALS,
                 WorkoutType.TEMPO_THRESHOLD,

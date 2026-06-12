@@ -53,7 +53,6 @@ class ReadinessCalculatorTest {
             healthMetrics = HealthMetricsSnapshot(
                 sleepMinutesLastNight = 470,
                 workoutsLast7Days = 4,
-                restingHeartRateBpm = 52,
             ),
             today = today,
         )
@@ -61,7 +60,7 @@ class ReadinessCalculatorTest {
         assertEquals("Manual + Health Connect", readiness.sourceLabel)
         assertEquals("High", readiness.confidenceLabel)
         assertTrue(readiness.basedOn.any { it.contains("sleep") })
-        assertTrue(readiness.basedOn.any { it.contains("resting HR") })
+        assertTrue(readiness.basedOn.any { it.contains("workouts") })
         assertTrue(readiness.summary.contains("sleep data supports recovery"))
     }
 

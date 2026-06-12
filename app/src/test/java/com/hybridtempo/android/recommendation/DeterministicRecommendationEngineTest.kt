@@ -28,7 +28,7 @@ class DeterministicRecommendationEngineTest {
     fun `post workout intent recommends post training recovery`() = runBlocking {
         val response = engine.recommend(request(sessionIntent = "post_workout"))
 
-        assertEquals("Cooldown HR Recovery", response.recommendation.protocol)
+        assertEquals("Cooldown Breath Recovery", response.recommendation.protocol)
         assertEquals("cooldown-hr-recovery", response.recommendation.breathSkillId)
     }
 

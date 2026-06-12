@@ -22,10 +22,9 @@ data class ReadinessScore(
 data class HealthMetricsSnapshot(
     val sleepMinutesLastNight: Int? = null,
     val workoutsLast7Days: Int? = null,
-    val restingHeartRateBpm: Long? = null,
 ) {
     val hasData: Boolean
-        get() = sleepMinutesLastNight != null || workoutsLast7Days != null || restingHeartRateBpm != null
+        get() = sleepMinutesLastNight != null || workoutsLast7Days != null
 }
 
 data class RaceCountdown(
@@ -105,7 +104,6 @@ object ReadinessCalculator {
         return listOfNotNull(
             sleepMinutesLastNight?.let { "Health Connect sleep: ${it / 60}h ${it % 60}m last night" },
             workoutsLast7Days?.let { "Health Connect workouts: $it sessions in 7 days" },
-            restingHeartRateBpm?.let { "Health Connect resting HR: $it bpm" },
         )
     }
 
@@ -120,9 +118,6 @@ object ReadinessCalculator {
         if (this?.workoutsLast7Days == null) {
             missing += "Recent workout data from Health Connect"
         }
-        if (this?.restingHeartRateBpm == null) {
-            missing += "Recent resting HR from Health Connect"
-        }
         return missing
     }
 
@@ -134,7 +129,6 @@ object ReadinessCalculator {
         val healthSignalCount = listOf(
             healthMetrics?.sleepMinutesLastNight,
             healthMetrics?.workoutsLast7Days,
-            healthMetrics?.restingHeartRateBpm,
         ).count { it != null }
 
         return when {
@@ -203,15 +197,7 @@ object ReadinessCalculator {
             }
         } ?: 0
 
-        val heartRateAdjustment = restingHeartRateBpm?.let {
-            when {
-                it <= 55 -> 2
-                it >= 75 -> -3
-                else -> 0
-            }
-        } ?: 0
-
-        return sleepAdjustment + workoutAdjustment + heartRateAdjustment
+        return sleepAdjustment + workoutAdjustment
     }
 
     private fun buildNudge(

@@ -141,6 +141,9 @@ class FirebaseHybridTempoRepository(
                     heartRateBeforeBpm = document.getLong("heartRateBeforeBpm")?.toInt(),
                     heartRateAfterBpm = document.getLong("heartRateAfterBpm")?.toInt(),
                     heartRateDeltaBpm = document.getLong("heartRateDeltaBpm")?.toInt(),
+                    breathRhythmBeforePercent = document.getLong("breathRhythmBeforePercent")?.toInt(),
+                    breathRhythmAfterPercent = document.getLong("breathRhythmAfterPercent")?.toInt(),
+                    breathRhythmImprovementPercent = document.getLong("breathRhythmImprovementPercent")?.toInt(),
                 )
             }
     }
@@ -226,6 +229,9 @@ private fun BreathworkSession.toFirestoreMap(): Map<String, Any> = buildMap {
     heartRateBeforeBpm?.let { put("heartRateBeforeBpm", it) }
     heartRateAfterBpm?.let { put("heartRateAfterBpm", it) }
     heartRateDeltaBpm?.let { put("heartRateDeltaBpm", it) }
+    breathRhythmBeforePercent?.let { put("breathRhythmBeforePercent", it) }
+    breathRhythmAfterPercent?.let { put("breathRhythmAfterPercent", it) }
+    breathRhythmImprovementPercent?.let { put("breathRhythmImprovementPercent", it) }
 }
 
 private fun Any?.asStringList(): List<String> = (this as? List<*>)

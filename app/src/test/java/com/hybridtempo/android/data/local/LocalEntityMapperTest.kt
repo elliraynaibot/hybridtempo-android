@@ -49,7 +49,7 @@ class LocalEntityMapperTest {
     fun `session entity round trips reflection data`() {
         val session = BreathworkSession(
             id = "session-1",
-            protocol = "Cooldown HR Recovery",
+            protocol = "Cooldown Breath Recovery",
             durationMinutes = 5,
             cadence = "4 second inhale - 6 second exhale",
             completed = true,
@@ -61,9 +61,9 @@ class LocalEntityMapperTest {
             reflectionNotes = "Settled faster than usual.",
             sessionStartedAt = "2026-06-05T20:05:00Z",
             sessionEndedAt = "2026-06-05T20:10:00Z",
-            heartRateBeforeBpm = 92,
-            heartRateAfterBpm = 78,
-            heartRateDeltaBpm = -14,
+            breathRhythmBeforePercent = 72,
+            breathRhythmAfterPercent = 84,
+            breathRhythmImprovementPercent = 12,
         )
 
         val restored = session.toLocalSessionEntity().toBreathworkSession()

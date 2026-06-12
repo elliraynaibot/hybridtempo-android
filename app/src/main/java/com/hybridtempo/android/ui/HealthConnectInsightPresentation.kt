@@ -13,25 +13,25 @@ fun HealthConnectUiStatus.toHealthConnectInsightPresentation(): HealthConnectIns
     return when {
         availability == HealthConnectAvailability.Unavailable -> HealthConnectInsightPresentation(
             title = "Manual review",
-            body = "Health Connect is not available on this device. You can still rate breath control and compare patterns over time.",
+            body = "Health Connect is not available on this device. Breath checks and reflections still give you a useful before-and-after signal.",
             actionLabel = null,
         )
 
         availability == HealthConnectAvailability.UpdateRequired -> HealthConnectInsightPresentation(
-            title = "HR-backed review",
-            body = "Update Health Connect to add heart rate context after training.",
+            title = "Optional workout context",
+            body = "Update Health Connect if you want completed workouts to prefill the review. Breath checks still work without it.",
             actionLabel = "Update Health Connect",
         )
 
         enabled -> HealthConnectInsightPresentation(
-            title = "HR-backed review",
-            body = "After your workout syncs, use heart rate context to see whether breathing helped keep effort steadier.",
+            title = "Optional workout context",
+            body = "Completed workouts can help label the session. Breath rhythm checks are the main before-and-after signal.",
             actionLabel = null,
         )
 
         else -> HealthConnectInsightPresentation(
-            title = "HR-backed review",
-            body = "Connect Health Connect after training to compare your breath-control rating with heart rate response.",
+            title = "Optional workout context",
+            body = "Connect Health Connect later to import completed workouts. You can still use breath checks before and after training now.",
             actionLabel = "Connect in settings",
         )
     }

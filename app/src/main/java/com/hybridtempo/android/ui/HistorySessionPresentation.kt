@@ -1,6 +1,8 @@
 package com.hybridtempo.android.ui
 
 import com.hybridtempo.android.data.BreathworkSession
+import com.hybridtempo.android.audio.BreathRhythmAnalyzer
+import com.hybridtempo.android.audio.BreathRhythmCheckResult
 
 data class HistorySessionPresentation(
     val title: String,
@@ -8,7 +10,7 @@ data class HistorySessionPresentation(
     val reflectionSummary: String,
     val feelingLabel: String,
     val notes: String,
-    val heartRateSummary: String,
+    val breathRhythmSummary: String,
     val hasReflection: Boolean,
 )
 
@@ -25,7 +27,7 @@ fun BreathworkSession.toHistorySessionPresentation(): HistorySessionPresentation
         },
         feelingLabel = if (hasReflection) reflectionFeeling.toFeelingLabel() else "",
         notes = reflectionNotes.trim(),
-        heartRateSummary = toHeartRateSummary(),
+        breathRhythmSummary = toBreathRhythmSummary(),
         hasReflection = hasReflection,
     )
 }
@@ -37,18 +39,13 @@ private fun String.toFeelingLabel(): String = when (this) {
     else -> ifBlank { "Reflection saved" }
 }
 
-private fun BreathworkSession.toHeartRateSummary(): String {
-    val before = heartRateBeforeBpm
-    val after = heartRateAfterBpm
-    val delta = heartRateDeltaBpm
+private fun BreathworkSession.toBreathRhythmSummary(): String = BreathRhythmAnalyzer.compare(
+    before = breathRhythmBeforePercent?.toBreathCheckResult(),
+    after = breathRhythmAfterPercent?.toBreathCheckResult(),
+)
 
-    return if (before != null && after != null && delta != null) {
-        "HR $before -> $after bpm (${delta.toSignedString()})"
-    } else if (before != null) {
-        "Starting HR locked: $before bpm. No post-session HR sample yet."
-    } else {
-        "No heart-rate samples found for this session."
-    }
-}
-
-private fun Int.toSignedString(): String = if (this > 0) "+$this" else toString()
+private fun Int.toBreathCheckResult(): BreathRhythmCheckResult = BreathRhythmCheckResult(
+    rhythmMatchedPercent = this,
+    detectedBreaths = 0,
+    durationSeconds = 20,
+)

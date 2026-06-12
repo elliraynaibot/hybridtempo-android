@@ -7,7 +7,7 @@ class BreathworkSessionReflectionTest {
     @Test
     fun `completed session can carry post session reflection`() {
         val session = BreathworkSession(
-            protocol = "Cooldown HR Recovery",
+            protocol = "Cooldown Breath Recovery",
             durationMinutes = 5,
             cadence = "4 second inhale - 6 second exhale",
             completed = true,
@@ -26,7 +26,7 @@ class BreathworkSessionReflectionTest {
     }
 
     @Test
-    fun `completed session can carry heart rate impact`() {
+    fun `completed session can carry breath rhythm checks`() {
         val session = BreathworkSession(
             protocol = "Reset After the Session",
             durationMinutes = 5,
@@ -34,13 +34,13 @@ class BreathworkSessionReflectionTest {
             completed = true,
             sessionStartedAt = "2026-06-12T14:00:00Z",
             sessionEndedAt = "2026-06-12T14:05:00Z",
-            heartRateBeforeBpm = 92,
-            heartRateAfterBpm = 78,
-            heartRateDeltaBpm = -14,
+            breathRhythmBeforePercent = 72,
+            breathRhythmAfterPercent = 84,
+            breathRhythmImprovementPercent = 12,
         )
 
-        assertEquals(92, session.heartRateBeforeBpm)
-        assertEquals(78, session.heartRateAfterBpm)
-        assertEquals(-14, session.heartRateDeltaBpm)
+        assertEquals(72, session.breathRhythmBeforePercent)
+        assertEquals(84, session.breathRhythmAfterPercent)
+        assertEquals(12, session.breathRhythmImprovementPercent)
     }
 }

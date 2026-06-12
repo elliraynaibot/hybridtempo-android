@@ -22,6 +22,20 @@ class GuidedAudioController(
         }
     }
 
+    fun syncTo(
+        elapsedSeconds: Int,
+        playing: Boolean,
+    ) {
+        val currentPlayer = player ?: buildPlayer() ?: return
+        currentPlayer.seekTo(elapsedSeconds.coerceAtLeast(0) * 1_000L)
+
+        if (playing) {
+            currentPlayer.play()
+        } else {
+            currentPlayer.pause()
+        }
+    }
+
     fun release() {
         player?.release()
         player = null

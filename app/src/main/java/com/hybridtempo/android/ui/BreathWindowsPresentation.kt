@@ -46,7 +46,7 @@ fun defaultBreathWindows(): List<BreathWindowPresentation> = listOf(
     BreathWindowPresentation(
         number = 4,
         title = "After the set",
-        cue = "Recover. Bring HR down.",
+        cue = "Recover. Bring breathing down.",
         colorRole = BreathWindowColorRole.Recover,
     ),
 )
