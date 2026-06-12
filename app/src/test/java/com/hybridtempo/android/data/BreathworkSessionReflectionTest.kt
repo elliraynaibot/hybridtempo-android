@@ -24,4 +24,23 @@ class BreathworkSessionReflectionTest {
         assertEquals("calmer", session.reflectionFeeling)
         assertEquals("Settled faster than usual.", session.reflectionNotes)
     }
+
+    @Test
+    fun `completed session can carry heart rate impact`() {
+        val session = BreathworkSession(
+            protocol = "Reset After the Session",
+            durationMinutes = 5,
+            cadence = "Guided audio",
+            completed = true,
+            sessionStartedAt = "2026-06-12T14:00:00Z",
+            sessionEndedAt = "2026-06-12T14:05:00Z",
+            heartRateBeforeBpm = 92,
+            heartRateAfterBpm = 78,
+            heartRateDeltaBpm = -14,
+        )
+
+        assertEquals(92, session.heartRateBeforeBpm)
+        assertEquals(78, session.heartRateAfterBpm)
+        assertEquals(-14, session.heartRateDeltaBpm)
+    }
 }

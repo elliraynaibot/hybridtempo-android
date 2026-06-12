@@ -6,6 +6,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -84,6 +85,57 @@ class HealthConnectManager(private val context: Context) {
         return readRecentExerciseSessions(client(), now)
     }
 
+    suspend fun readHeartRateImpact(
+        sessionStartedAt: Instant,
+        sessionEndedAt: Instant,
+        lockedStart: HeartRateLock? = null,
+        grantedPermissions: Set<String>? = null,
+    ): HeartRateImpact? {
+        if (availability() != HealthConnectAvailability.Available) return null
+        val permissions = grantedPermissions ?: grantedPermissions()
+        if (HEART_RATE_PERMISSION !in permissions) return null
+
+        val samples = readHeartRateSamples(
+            client = client(),
+            startTime = sessionStartedAt.minus(Duration.ofMinutes(2)),
+            endTime = sessionEndedAt.plus(Duration.ofMinutes(2)),
+        )
+
+        return if (lockedStart != null) {
+            HeartRateImpactCalculator.calculateFromLockedStart(
+                lockedStart = lockedStart,
+                sessionEndedAt = sessionEndedAt,
+                samples = samples,
+            )
+        } else {
+            HeartRateImpactCalculator.calculate(
+                sessionStartedAt = sessionStartedAt,
+                sessionEndedAt = sessionEndedAt,
+                samples = samples,
+            )
+        }
+    }
+
+    suspend fun readPreSessionHeartRateLock(
+        sessionStartedAt: Instant,
+        grantedPermissions: Set<String>? = null,
+    ): HeartRateLock? {
+        if (availability() != HealthConnectAvailability.Available) return null
+        val permissions = grantedPermissions ?: grantedPermissions()
+        if (HEART_RATE_PERMISSION !in permissions) return null
+
+        val samples = readHeartRateSamples(
+            client = client(),
+            startTime = sessionStartedAt.minus(Duration.ofMinutes(2)),
+            endTime = sessionStartedAt,
+        )
+
+        return HeartRateImpactCalculator.lockRecentStart(
+            sessionStartedAt = sessionStartedAt,
+            samples = samples,
+        )
+    }
+
     private suspend fun readSleepMinutes(
         client: HealthConnectClient,
         now: Instant,
@@ -133,6 +185,28 @@ class HealthConnectManager(private val context: Context) {
             }
     }.getOrDefault(emptyList())
 
+    private suspend fun readHeartRateSamples(
+        client: HealthConnectClient,
+        startTime: Instant,
+        endTime: Instant,
+    ): List<HeartRateSample> = runCatching {
+        client.readRecords(
+            ReadRecordsRequest(
+                recordType = HeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(startTime, endTime),
+            ),
+        ).records
+            .flatMap { record ->
+                record.samples.map { sample ->
+                    HeartRateSample(
+                        time = sample.time,
+                        bpm = sample.beatsPerMinute.toInt(),
+                    )
+                }
+            }
+            .sortedBy { it.time }
+    }.getOrDefault(emptyList())
+
     private suspend fun readRestingHeartRate(
         client: HealthConnectClient,
         now: Instant,
@@ -152,11 +226,13 @@ class HealthConnectManager(private val context: Context) {
     companion object {
         private val SLEEP_PERMISSION = HealthPermission.getReadPermission(SleepSessionRecord::class)
         private val EXERCISE_PERMISSION = HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        private val HEART_RATE_PERMISSION = HealthPermission.getReadPermission(HeartRateRecord::class)
         private val RESTING_HEART_RATE_PERMISSION = HealthPermission.getReadPermission(RestingHeartRateRecord::class)
 
         val PERMISSIONS: Set<String> = setOf(
             SLEEP_PERMISSION,
             EXERCISE_PERMISSION,
+            HEART_RATE_PERMISSION,
             RESTING_HEART_RATE_PERMISSION,
         )
 

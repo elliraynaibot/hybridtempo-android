@@ -129,6 +129,11 @@ data class BreathworkSession(
     val perceivedRecovery: Int = 0,
     val reflectionFeeling: String = "",
     val reflectionNotes: String = "",
+    val sessionStartedAt: String = "",
+    val sessionEndedAt: String = "",
+    val heartRateBeforeBpm: Int? = null,
+    val heartRateAfterBpm: Int? = null,
+    val heartRateDeltaBpm: Int? = null,
 )
 
 data class SaveResult(

@@ -95,6 +95,7 @@ import com.hybridtempo.android.domain.model.ImportedWorkout
 import com.hybridtempo.android.health.HealthConnectAvailability
 import com.hybridtempo.android.health.HealthConnectManager
 import com.hybridtempo.android.health.HealthConnectUiStatus
+import com.hybridtempo.android.health.HeartRateLock
 import com.hybridtempo.android.readiness.RaceCountdown
 import com.hybridtempo.android.readiness.RaceCountdownCalculator
 import com.hybridtempo.android.readiness.ManualDetailsPrompt
@@ -103,6 +104,7 @@ import com.hybridtempo.android.readiness.ReadinessCalculator
 import com.hybridtempo.android.readiness.ReadinessScore
 import com.hybridtempo.android.recommendation.RecommendationQuota
 import com.hybridtempo.android.recommendation.RecommendationSource
+import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -318,10 +320,17 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                         recommendation = uiState.recommendation,
                         guideMode = selectedGuideMode,
                         guidedSession = selectedGuidedSession,
+                        preSessionHeartRateLock = uiState.preSessionHeartRateLock,
+                        isLockingHeartRate = uiState.isLockingHeartRate,
+                        heartRateLockMessage = uiState.heartRateLockMessage,
                         onSettings = { showSettings = true },
                         onBack = { screen = AppScreen.TodayCue },
-                        onFinish = {
-                            viewModel.completeCurrentSession()
+                        onSessionStarted = viewModel::lockPreSessionHeartRate,
+                        onFinish = { sessionStartedAt, sessionEndedAt ->
+                            viewModel.completeCurrentSession(
+                                sessionStartedAt = sessionStartedAt,
+                                sessionEndedAt = sessionEndedAt,
+                            )
                             screen = AppScreen.WorkoutHandoff
                         },
                     )
@@ -329,6 +338,7 @@ fun HybridTempoApp(viewModel: HybridTempoViewModel = viewModel()) {
                     AppScreen.WorkoutHandoff -> WorkoutHandoffScreen(
                         cue = uiState.draft.toTodayCuePresentation(),
                         healthConnectStatus = uiState.healthConnectStatus,
+                        completedSession = uiState.lastCompletedSession,
                         onSettings = { showSettings = true },
                         onHome = { screen = AppScreen.Home },
                         onReview = { screen = AppScreen.WorkoutReview },
@@ -1502,13 +1512,22 @@ private fun SettingsSheet(
                 .padding(horizontal = 28.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Eyebrow("Settings")
+            Eyebrow("Profile")
             Text(
-                text = "Athlete defaults",
+                text = "Your athlete profile",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Black,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp, bottom = 22.dp),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                text = "Manage race defaults and connect Google Health through Health Connect.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(top = 8.dp, bottom = 22.dp),
             )
             OutlinedTextField(
                 value = state.name,
@@ -2063,7 +2082,7 @@ private fun HealthConnectCard(
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isAvailable = status.availability == HealthConnectAvailability.Available
+    val presentation = status.toProfileHealthConnectPresentation(enabled)
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
@@ -2077,12 +2096,12 @@ private fun HealthConnectCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Health Connect",
+                        text = presentation.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = status.toDisplayLabel(enabled),
+                        text = presentation.statusLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
@@ -2090,7 +2109,7 @@ private fun HealthConnectCard(
                 }
                 Switch(
                     checked = enabled && status.hasRequiredPermissions,
-                    enabled = isAvailable,
+                    enabled = presentation.canConnect,
                     onCheckedChange = { checked ->
                         if (checked) {
                             onConnect()
@@ -2101,7 +2120,7 @@ private fun HealthConnectCard(
                 )
             }
             Text(
-                text = "Optional: improve readiness using sleep, workouts, and resting heart rate. You can skip this and still use manual check-ins.",
+                text = presentation.body,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
@@ -2112,10 +2131,10 @@ private fun HealthConnectCard(
             ) {
                 OutlinedButton(
                     onClick = onConnect,
-                    enabled = isAvailable,
+                    enabled = presentation.canConnect,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(if (enabled) "Reconnect" else "Connect")
+                    Text(presentation.connectAction)
                 }
                 TextButton(
                     onClick = onSkip,
@@ -2126,15 +2145,6 @@ private fun HealthConnectCard(
             }
         }
     }
-}
-
-private fun HealthConnectUiStatus.toDisplayLabel(enabled: Boolean): String = when {
-    availability == HealthConnectAvailability.Unavailable -> "Unavailable on this device"
-    availability == HealthConnectAvailability.UpdateRequired -> "Update Health Connect to connect"
-    enabled && metrics?.hasData == true -> "Connected: readiness can use recent health data"
-    enabled && hasRequiredPermissions -> "Connected: waiting for recent health data"
-    enabled -> "Enabled, but permissions need review"
-    else -> "Not connected"
 }
 
 @Composable
@@ -3341,11 +3351,16 @@ private fun SessionScreen(
     recommendation: BreathworkRecommendation,
     guideMode: GuideModePresentation,
     guidedSession: GuidedBreathworkSession,
+    preSessionHeartRateLock: HeartRateLock?,
+    isLockingHeartRate: Boolean,
+    heartRateLockMessage: String?,
     onSettings: () -> Unit,
     onBack: () -> Unit,
-    onFinish: () -> Unit,
+    onSessionStarted: (Instant) -> Unit,
+    onFinish: (Instant, Instant) -> Unit,
 ) {
     val context = LocalContext.current
+    val sessionStartedAt = remember(guidedSession.id) { Instant.now() }
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(true) }
     var guidedAudioEnabled by remember { mutableStateOf(true) }
@@ -3361,6 +3376,10 @@ private fun SessionScreen(
             delay(1000)
             elapsedSeconds += 1
         }
+    }
+
+    LaunchedEffect(guidedSession.id, sessionStartedAt) {
+        onSessionStarted(sessionStartedAt)
     }
 
     LaunchedEffect(running, guidedAudioEnabled, guidedSession.audioTrackName) {
@@ -3393,6 +3412,12 @@ private fun SessionScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp),
+        )
+        HeartRateLockCard(
+            lock = preSessionHeartRateLock,
+            isLoading = isLockingHeartRate,
+            message = heartRateLockMessage,
+            modifier = Modifier.padding(top = 18.dp),
         )
         Spacer(modifier = Modifier.height(34.dp))
         WaveBreathGuide(
@@ -3438,7 +3463,7 @@ private fun SessionScreen(
                 Text(if (running) "Pause" else "Resume")
             }
             Button(
-                onClick = onFinish,
+                onClick = { onFinish(sessionStartedAt, Instant.now()) },
                 modifier = Modifier
                     .weight(1f)
                     .height(62.dp),
@@ -3452,9 +3477,30 @@ private fun SessionScreen(
 }
 
 @Composable
+private fun HeartRateLockCard(
+    lock: HeartRateLock?,
+    isLoading: Boolean,
+    message: String?,
+    modifier: Modifier = Modifier,
+) {
+    val body = when {
+        isLoading -> "Checking Health Connect for a recent HR sample..."
+        lock != null -> lock.summary
+        else -> message ?: "Starting HR will be estimated if Health Connect has a recent sample."
+    }
+
+    InsightCard(
+        title = "Starting heart rate",
+        body = body,
+        modifier = modifier,
+    )
+}
+
+@Composable
 private fun WorkoutHandoffScreen(
     cue: TodayCuePresentation,
     healthConnectStatus: HealthConnectUiStatus,
+    completedSession: BreathworkSession?,
     onSettings: () -> Unit,
     onHome: () -> Unit,
     onReview: () -> Unit,
@@ -3494,6 +3540,11 @@ private fun WorkoutHandoffScreen(
             onAction = onSettings,
             modifier = Modifier.padding(top = 14.dp),
         )
+        HeartRateResponseCard(
+            session = completedSession,
+            healthConnectStatus = healthConnectStatus,
+            modifier = Modifier.padding(top = 14.dp),
+        )
         Spacer(modifier = Modifier.height(42.dp))
         PrimaryAction(text = "I'LL COME BACK AFTER TRAINING", onClick = onHome)
         OutlinedButton(
@@ -3507,6 +3558,28 @@ private fun WorkoutHandoffScreen(
             Text("Review now")
         }
     }
+}
+
+@Composable
+private fun HeartRateResponseCard(
+    session: BreathworkSession?,
+    healthConnectStatus: HealthConnectUiStatus,
+    modifier: Modifier = Modifier,
+) {
+    val body = when {
+        session?.heartRateBeforeBpm != null ->
+            session.toHistorySessionPresentation().heartRateSummary
+        healthConnectStatus.enabled ->
+            "No heart-rate samples were available around this breathwork session yet."
+        else ->
+            "Connect Health Connect from your profile to compare HR before and after a session."
+    }
+
+    InsightCard(
+        title = "Heart-rate response",
+        body = body,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -4573,6 +4646,17 @@ private fun SessionRow(session: BreathworkSession) {
                     )
                 }
             }
+            Text(
+                text = presentation.heartRateSummary,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (session.heartRateDeltaBpm != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                fontWeight = if (session.heartRateDeltaBpm != null) FontWeight.Bold else FontWeight.Normal,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
     }
 }

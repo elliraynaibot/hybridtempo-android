@@ -136,6 +136,11 @@ class FirebaseHybridTempoRepository(
                     perceivedRecovery = document.getLong("perceivedRecovery")?.toInt() ?: 0,
                     reflectionFeeling = document.getString("reflectionFeeling").orEmpty(),
                     reflectionNotes = document.getString("reflectionNotes").orEmpty(),
+                    sessionStartedAt = document.getString("sessionStartedAt").orEmpty(),
+                    sessionEndedAt = document.getString("sessionEndedAt").orEmpty(),
+                    heartRateBeforeBpm = document.getLong("heartRateBeforeBpm")?.toInt(),
+                    heartRateAfterBpm = document.getLong("heartRateAfterBpm")?.toInt(),
+                    heartRateDeltaBpm = document.getLong("heartRateDeltaBpm")?.toInt(),
                 )
             }
     }
@@ -204,19 +209,24 @@ private fun BreathworkRecommendation.toFirestoreMap(): Map<String, Any> = mapOf(
     "breathworkProtocol" to breathworkProtocol.toFirestoreMap(),
 )
 
-private fun BreathworkSession.toFirestoreMap(): Map<String, Any> = mapOf(
-    "id" to id,
-    "protocol" to protocol,
-    "durationMinutes" to durationMinutes,
-    "cadence" to cadence,
-    "completed" to completed,
-    "completedAt" to completedAt,
-    "breathSkillId" to breathSkillId,
-    "perceivedControl" to perceivedControl,
-    "perceivedRecovery" to perceivedRecovery,
-    "reflectionFeeling" to reflectionFeeling,
-    "reflectionNotes" to reflectionNotes,
-)
+private fun BreathworkSession.toFirestoreMap(): Map<String, Any> = buildMap {
+    put("id", id)
+    put("protocol", protocol)
+    put("durationMinutes", durationMinutes)
+    put("cadence", cadence)
+    put("completed", completed)
+    put("completedAt", completedAt)
+    put("breathSkillId", breathSkillId)
+    put("perceivedControl", perceivedControl)
+    put("perceivedRecovery", perceivedRecovery)
+    put("reflectionFeeling", reflectionFeeling)
+    put("reflectionNotes", reflectionNotes)
+    put("sessionStartedAt", sessionStartedAt)
+    put("sessionEndedAt", sessionEndedAt)
+    heartRateBeforeBpm?.let { put("heartRateBeforeBpm", it) }
+    heartRateAfterBpm?.let { put("heartRateAfterBpm", it) }
+    heartRateDeltaBpm?.let { put("heartRateDeltaBpm", it) }
+}
 
 private fun Any?.asStringList(): List<String> = (this as? List<*>)
     ?.filterIsInstance<String>()

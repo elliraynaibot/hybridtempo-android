@@ -8,6 +8,7 @@ data class HistorySessionPresentation(
     val reflectionSummary: String,
     val feelingLabel: String,
     val notes: String,
+    val heartRateSummary: String,
     val hasReflection: Boolean,
 )
 
@@ -24,6 +25,7 @@ fun BreathworkSession.toHistorySessionPresentation(): HistorySessionPresentation
         },
         feelingLabel = if (hasReflection) reflectionFeeling.toFeelingLabel() else "",
         notes = reflectionNotes.trim(),
+        heartRateSummary = toHeartRateSummary(),
         hasReflection = hasReflection,
     )
 }
@@ -34,3 +36,19 @@ private fun String.toFeelingLabel(): String = when (this) {
     SessionReflectionFeeling.MoreActivated.value -> SessionReflectionFeeling.MoreActivated.label
     else -> ifBlank { "Reflection saved" }
 }
+
+private fun BreathworkSession.toHeartRateSummary(): String {
+    val before = heartRateBeforeBpm
+    val after = heartRateAfterBpm
+    val delta = heartRateDeltaBpm
+
+    return if (before != null && after != null && delta != null) {
+        "HR $before -> $after bpm (${delta.toSignedString()})"
+    } else if (before != null) {
+        "Starting HR locked: $before bpm. No post-session HR sample yet."
+    } else {
+        "No heart-rate samples found for this session."
+    }
+}
+
+private fun Int.toSignedString(): String = if (this > 0) "+$this" else toString()

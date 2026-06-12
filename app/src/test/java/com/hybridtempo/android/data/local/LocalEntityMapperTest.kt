@@ -59,6 +59,11 @@ class LocalEntityMapperTest {
             perceivedRecovery = 8,
             reflectionFeeling = "calmer",
             reflectionNotes = "Settled faster than usual.",
+            sessionStartedAt = "2026-06-05T20:05:00Z",
+            sessionEndedAt = "2026-06-05T20:10:00Z",
+            heartRateBeforeBpm = 92,
+            heartRateAfterBpm = 78,
+            heartRateDeltaBpm = -14,
         )
 
         val restored = session.toLocalSessionEntity().toBreathworkSession()

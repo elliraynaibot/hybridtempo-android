@@ -72,6 +72,11 @@ fun BreathworkSession.toLocalSessionEntity(): LocalSessionEntity = LocalSessionE
     perceivedRecovery = perceivedRecovery,
     reflectionFeeling = reflectionFeeling,
     reflectionNotes = reflectionNotes,
+    sessionStartedAt = sessionStartedAt,
+    sessionEndedAt = sessionEndedAt,
+    heartRateBeforeBpm = heartRateBeforeBpm,
+    heartRateAfterBpm = heartRateAfterBpm,
+    heartRateDeltaBpm = heartRateDeltaBpm,
 )
 
 fun LocalSessionEntity.toBreathworkSession(): BreathworkSession = BreathworkSession(
@@ -86,4 +91,9 @@ fun LocalSessionEntity.toBreathworkSession(): BreathworkSession = BreathworkSess
     perceivedRecovery = perceivedRecovery,
     reflectionFeeling = reflectionFeeling,
     reflectionNotes = reflectionNotes,
+    sessionStartedAt = sessionStartedAt,
+    sessionEndedAt = sessionEndedAt,
+    heartRateBeforeBpm = heartRateBeforeBpm,
+    heartRateAfterBpm = heartRateAfterBpm,
+    heartRateDeltaBpm = heartRateDeltaBpm,
 )

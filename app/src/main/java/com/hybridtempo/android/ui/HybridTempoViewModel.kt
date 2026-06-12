@@ -10,6 +10,7 @@ import com.hybridtempo.android.data.DailyCheckIn
 import com.hybridtempo.android.data.FirebaseHybridTempoRepository
 import com.hybridtempo.android.domain.model.ImportedWorkout
 import com.hybridtempo.android.health.HealthConnectAvailability
+import com.hybridtempo.android.health.HeartRateLock
 import com.hybridtempo.android.health.HealthConnectManager
 import com.hybridtempo.android.health.HealthConnectUiStatus
 import com.hybridtempo.android.recommendation.AthleteProfileContext
@@ -22,6 +23,7 @@ import com.hybridtempo.android.recommendation.RecommendationQuota
 import com.hybridtempo.android.recommendation.RecommendationRequest
 import com.hybridtempo.android.recommendation.RecommendationSource
 import com.hybridtempo.android.notifications.RecoveryReminderScheduler
+import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,9 +76,13 @@ data class HybridTempoUiState(
     ),
     val workoutReviewDraft: WorkoutReviewDraft = WorkoutReviewDraft(),
     val recentSessions: List<BreathworkSession> = emptyList(),
+    val lastCompletedSession: BreathworkSession? = null,
     val recentCheckIns: List<DailyCheckIn> = emptyList(),
     val recentImportedWorkouts: List<ImportedWorkout> = emptyList(),
     val healthConnectStatus: HealthConnectUiStatus = HealthConnectUiStatus(),
+    val preSessionHeartRateLock: HeartRateLock? = null,
+    val isLockingHeartRate: Boolean = false,
+    val heartRateLockMessage: String? = null,
     val saveMessage: String = "Firebase persistence is ready when app/google-services.json is added.",
     val isSaving: Boolean = false,
 )
@@ -145,6 +151,9 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
                     },
                 ),
             )
+        }
+        if (enabled) {
+            saveProfile()
         }
         refreshHealthConnectStatus()
     }
@@ -253,23 +262,45 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun completeCurrentSession() {
+    fun completeCurrentSession(
+        sessionStartedAt: Instant = Instant.now(),
+        sessionEndedAt: Instant = Instant.now(),
+    ) {
         val recommendation = _uiState.value.recommendation
         val reflection = _uiState.value.reflectionDraft
-        val session = BreathworkSession(
-            protocol = recommendation.protocol,
-            durationMinutes = recommendation.durationMinutes,
-            cadence = recommendation.cadence,
-            completed = true,
-            breathSkillId = recommendation.breathSkillId,
-            perceivedControl = reflection.perceivedControl,
-            perceivedRecovery = reflection.perceivedRecovery,
-            reflectionFeeling = reflection.feeling.value,
-            reflectionNotes = reflection.notes.trim(),
-        )
+        val lockedStart = _uiState.value.preSessionHeartRateLock
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
+            val grantedPermissions = _uiState.value.healthConnectStatus.grantedPermissions
+            val heartRateImpact = if (_uiState.value.healthConnectStatus.enabled) {
+                runCatching {
+                    healthConnectManager.readHeartRateImpact(
+                        sessionStartedAt = sessionStartedAt,
+                        sessionEndedAt = sessionEndedAt,
+                        lockedStart = lockedStart,
+                        grantedPermissions = grantedPermissions,
+                    )
+                }.getOrNull()
+            } else {
+                null
+            }
+            val session = BreathworkSession(
+                protocol = recommendation.protocol,
+                durationMinutes = recommendation.durationMinutes,
+                cadence = recommendation.cadence,
+                completed = true,
+                breathSkillId = recommendation.breathSkillId,
+                perceivedControl = reflection.perceivedControl,
+                perceivedRecovery = reflection.perceivedRecovery,
+                reflectionFeeling = reflection.feeling.value,
+                reflectionNotes = reflection.notes.trim(),
+                sessionStartedAt = sessionStartedAt.toString(),
+                sessionEndedAt = sessionEndedAt.toString(),
+                heartRateBeforeBpm = heartRateImpact?.beforeBpm ?: lockedStart?.bpm,
+                heartRateAfterBpm = heartRateImpact?.afterBpm,
+                heartRateDeltaBpm = heartRateImpact?.deltaBpm,
+            )
             val result = runCatching {
                 repository.completeSession(session)
             }.fold(
@@ -280,11 +311,56 @@ class HybridTempoViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update {
                 it.copy(
                     isSaving = false,
+                    lastCompletedSession = session,
+                    preSessionHeartRateLock = null,
+                    isLockingHeartRate = false,
+                    heartRateLockMessage = null,
                     saveMessage = result.message,
                     reflectionDraft = SessionReflectionDraft(
                         perceivedControl = 7,
                         perceivedRecovery = 7,
                     ),
+                )
+            }
+        }
+    }
+
+    fun lockPreSessionHeartRate(sessionStartedAt: Instant) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            if (!state.healthConnectStatus.enabled) {
+                _uiState.update {
+                    it.copy(
+                        preSessionHeartRateLock = null,
+                        isLockingHeartRate = false,
+                        heartRateLockMessage = "Connect Health Connect from your profile to lock starting HR.",
+                    )
+                }
+                return@launch
+            }
+
+            _uiState.update {
+                it.copy(
+                    preSessionHeartRateLock = null,
+                    isLockingHeartRate = true,
+                    heartRateLockMessage = "Checking Health Connect for a recent HR sample...",
+                )
+            }
+
+            val grantedPermissions = state.healthConnectStatus.grantedPermissions
+            val lock = runCatching {
+                healthConnectManager.readPreSessionHeartRateLock(
+                    sessionStartedAt = sessionStartedAt,
+                    grantedPermissions = grantedPermissions,
+                )
+            }.getOrNull()
+
+            _uiState.update {
+                it.copy(
+                    preSessionHeartRateLock = lock,
+                    isLockingHeartRate = false,
+                    heartRateLockMessage = lock?.summary
+                        ?: "No recent HR sample found. Start HR tracking on your wearable and try again.",
                 )
             }
         }
